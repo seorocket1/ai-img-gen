@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { X, Mail, UserCheck, Sparkles, Eye, EyeOff } from 'lucide-react';
+import { X, Mail, UserCheck, Sparkles, Eye, EyeOff, UserPlus } from 'lucide-react';
 
 interface AuthModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSignInWithEmail: (email: string, password: string) => Promise<boolean>;
   onSignInAnonymously: () => Promise<boolean>;
+  onOpenSignUp: () => void;
 }
 
 export const AuthModal: React.FC<AuthModalProps> = ({
@@ -13,6 +14,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   onClose,
   onSignInWithEmail,
   onSignInAnonymously,
+  onOpenSignUp,
 }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -49,6 +51,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       setError('Failed to sign in anonymously. Please try again.');
     }
     setIsLoading(false);
+  };
+
+  const handleOpenSignUp = () => {
+    onClose();
+    onOpenSignUp();
   };
 
   return (
@@ -151,6 +158,18 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             </div>
           </div>
 
+          {/* Sign Up Button */}
+          <button
+            onClick={handleOpenSignUp}
+            disabled={isLoading}
+            className="w-full py-3 px-6 rounded-xl bg-gradient-to-r from-green-600 to-emerald-600 text-white font-semibold hover:from-green-700 hover:to-emerald-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 transform hover:scale-[1.02] disabled:hover:scale-100"
+          >
+            <div className="flex items-center justify-center">
+              <UserPlus className="w-5 h-5 mr-2" />
+              Create New Account (100 Free Credits!)
+            </div>
+          </button>
+
           {/* Anonymous Sign In */}
           <button
             onClick={handleAnonymousSignIn}
@@ -165,7 +184,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             ) : (
               <div className="flex items-center justify-center">
                 <UserCheck className="w-5 h-5 mr-2" />
-                Continue Anonymously
+                Continue Anonymously (Limited Features)
               </div>
             )}
           </button>

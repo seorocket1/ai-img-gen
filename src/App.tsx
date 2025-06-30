@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Sparkles, Zap, LogOut, User, History } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Sparkles, Zap, LogOut, User, History, Settings, CreditCard } from 'lucide-react';
 import { ImageTypeSelector } from './components/ImageTypeSelector';
 import { BlogImageForm } from './components/BlogImageForm';
 import { InfographicForm } from './components/InfographicForm';
@@ -8,13 +8,16 @@ import { ProgressSteps } from './components/ProgressSteps';
 import { QuickNavigation } from './components/QuickNavigation';
 import { DreamscapeBackground } from './components/DreamscapeBackground';
 import { AuthModal } from './components/AuthModal';
+import { SignUpModal } from './components/SignUpModal';
+import { AdminPanel } from './components/AdminPanel';
 import { ImageHistorySidebar } from './components/ImageHistorySidebar';
 import { BulkProcessingModal } from './components/BulkProcessingModal';
 import { SuccessNotification } from './components/SuccessNotification';
-import { useAuth } from './hooks/useAuth';
+import { useSupabaseAuth } from './hooks/useSupabaseAuth';
 import { useImageHistory } from './hooks/useImageHistory';
 import { useProcessingState } from './hooks/useProcessingState';
 import { sanitizeFormData } from './utils/textSanitizer';
+import { deductCredits, saveImageGeneration } from './lib/supabase';
 
 type Step = 'select' | 'form' | 'result';
 type ImageType = 'blog' | 'infographic' | null;
@@ -26,8 +29,14 @@ interface GeneratedImage {
 
 const WEBHOOK_URL = 'https://n8n.seoengine.agency/webhook/6e9e3b30-cb55-4d74-aa9d-68691983455f';
 
+// Credit costs
+const CREDIT_COSTS = {
+  blog: 5,
+  infographic: 10,
+};
+
 function App() {
-  const { user, isAuthenticated, isLoading: authLoading, signInWithEmail, signInAnonymously, signOut } = useAuth();
+  const { user, isAuthenticated, isLoading: authLoading, signUp, signIn, signOut, refreshUser } = useSupabaseAuth();
   const { addToHistory, history } = useImageHistory();
   const { 
     isProcessing, 
@@ -39,6 +48,8 @@ function App() {
   } = useProcessingState();
   
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const [showSignUpModal, setShowSignUpModal] = useState(false);
+  const [showAdminPanel, setShowAdminPanel] = useState(false);
   const [showHistorySidebar, setShowHistorySidebar] = useState(false);
   const [showBulkModal, setShowBulkModal] = useState(false);
   const [showSuccessNotification, setShowSuccessNotification] = useState(false);
@@ -72,7 +83,6 @@ function App() {
   };
 
   const handleQuickNavigation = (type: 'blog' | 'infographic') => {
-    // If switching types while in form or result step, go to form step for new type
     if (currentStep !== 'select') {
       setSelectedType(type);
       setCurrentStep('form');
@@ -84,7 +94,25 @@ function App() {
     }
   };
 
+  const checkCredits = (imageType: 'blog' | 'infographic'): boolean => {
+    if (!user || user.isAnonymous) return true; // Anonymous users can still use the service
+    
+    const requiredCredits = CREDIT_COSTS[imageType];
+    if (user.credits < requiredCredits) {
+      setError(`Insufficient credits. You need ${requiredCredits} credits to generate a ${imageType} image. You currently have ${user.credits} credits.`);
+      return false;
+    }
+    return true;
+  };
+
   const handleFormSubmit = async (data: any) => {
+    if (!selectedType) return;
+
+    // Check credits before processing
+    if (!checkCredits(selectedType)) {
+      return;
+    }
+
     setIsProcessing(true);
     setFormData(data);
     setError(null);
@@ -133,6 +161,36 @@ function App() {
       console.log('Webhook response:', result);
 
       if (result.image) {
+        // Deduct credits for authenticated users
+        if (user && !user.isAnonymous) {
+          try {
+            await deductCredits(user.id, CREDIT_COSTS[selectedType]);
+            await refreshUser(); // Refresh user data to update credits
+          } catch (creditError) {
+            console.error('Error deducting credits:', creditError);
+            // Continue with image generation even if credit deduction fails
+          }
+        }
+
+        // Save to database for authenticated users
+        if (user && !user.isAnonymous) {
+          try {
+            await saveImageGeneration({
+              user_id: user.id,
+              image_type: selectedType,
+              title: selectedType === 'blog' ? sanitizedData.title : undefined,
+              content: selectedType === 'blog' ? sanitizedData.intro : sanitizedData.content,
+              style: sanitizedData.style,
+              colour: sanitizedData.colour,
+              credits_used: CREDIT_COSTS[selectedType],
+              image_data: result.image,
+            });
+          } catch (dbError) {
+            console.error('Error saving to database:', dbError);
+            // Continue with local storage even if database save fails
+          }
+        }
+
         const newImage = {
           base64: result.image,
           type: selectedType as 'blog' | 'infographic',
@@ -202,6 +260,13 @@ function App() {
   };
 
   const handleOpenBulkModal = () => {
+    if (!selectedType) return;
+    
+    // Check if user has enough credits for at least one image
+    if (!checkCredits(selectedType)) {
+      return;
+    }
+    
     setShowBulkModal(true);
   };
 
@@ -213,9 +278,13 @@ function App() {
       total: totalCount
     });
     
+    // Refresh user data to update credits
+    if (user && !user.isAnonymous) {
+      refreshUser();
+    }
+    
     // Force refresh history sidebar if it's open
     if (showHistorySidebar) {
-      // Close and reopen to force refresh
       setShowHistorySidebar(false);
       setTimeout(() => setShowHistorySidebar(true), 100);
     }
@@ -325,6 +394,11 @@ function App() {
                 <Sparkles className="w-5 h-5 mr-2 text-purple-400" />
                 Professional Quality
               </div>
+              <div className="hidden sm:block w-2 h-2 bg-white/30 rounded-full"></div>
+              <div className="flex items-center px-4 py-2 bg-white/10 backdrop-blur-sm rounded-full border border-white/20 text-white">
+                <CreditCard className="w-5 h-5 mr-2 text-green-400" />
+                100 Free Credits
+              </div>
             </div>
             
             {/* CTA Button */}
@@ -340,8 +414,19 @@ function App() {
         <AuthModal
           isOpen={showAuthModal}
           onClose={() => setShowAuthModal(false)}
-          onSignInWithEmail={signInWithEmail}
-          onSignInAnonymously={signInAnonymously}
+          onSignInWithEmail={signIn}
+          onSignInAnonymously={async () => {
+            // For now, we'll disable anonymous sign-in to encourage registration
+            setError('Please create an account to use the service and get 100 free credits!');
+            return false;
+          }}
+          onOpenSignUp={() => setShowSignUpModal(true)}
+        />
+
+        <SignUpModal
+          isOpen={showSignUpModal}
+          onClose={() => setShowSignUpModal(false)}
+          onSignUp={signUp}
         />
       </div>
     );
@@ -368,6 +453,14 @@ function App() {
                 Powered by <span className="font-semibold text-blue-600 ml-1">SEO Engine</span>
               </div>
               <div className="flex items-center space-x-3">
+                {/* Credits Display */}
+                {user && !user.isAnonymous && (
+                  <div className="flex items-center px-3 py-2 bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-lg">
+                    <CreditCard className="w-4 h-4 mr-2 text-green-600" />
+                    <span className="text-sm font-semibold text-green-700">{user.credits} Credits</span>
+                  </div>
+                )}
+                
                 <button
                   onClick={() => setShowHistorySidebar(true)}
                   disabled={isProcessing || isBulkProcessing}
@@ -381,9 +474,22 @@ function App() {
                     </span>
                   )}
                 </button>
+                
+                {/* Admin Panel Button */}
+                {user && user.is_admin && (
+                  <button
+                    onClick={() => setShowAdminPanel(true)}
+                    disabled={isProcessing || isBulkProcessing}
+                    className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Admin Panel"
+                  >
+                    <Settings className="w-4 h-4" />
+                  </button>
+                )}
+                
                 <div className="flex items-center text-sm text-gray-600">
                   <User className="w-4 h-4 mr-2" />
-                  {user?.isAnonymous ? 'Anonymous' : user?.email || 'User'}
+                  {user?.isAnonymous ? 'Anonymous' : user?.name || user?.email || 'User'}
                 </div>
                 <button
                   onClick={signOut}
@@ -474,8 +580,8 @@ function App() {
                   </div>
                   <p className="text-gray-600 mt-2 text-sm sm:text-base">
                     {selectedType === 'blog' 
-                      ? 'Provide your blog details to generate a stunning featured image'
-                      : 'Provide your content to create a visual infographic'
+                      ? `Provide your blog details to generate a stunning featured image (${CREDIT_COSTS.blog} credits)`
+                      : `Provide your content to create a visual infographic (${CREDIT_COSTS.infographic} credits)`
                     }
                   </p>
                 </div>
@@ -555,7 +661,17 @@ function App() {
         onProgressUpdate={setBulkProgress}
         onImageGenerated={addToHistory}
         onBulkCompleted={handleBulkCompleted}
+        user={user}
+        onRefreshUser={refreshUser}
       />
+
+      {user && user.is_admin && (
+        <AdminPanel
+          isOpen={showAdminPanel}
+          onClose={() => setShowAdminPanel(false)}
+          currentUser={user}
+        />
+      )}
 
       <SuccessNotification
         isVisible={showSuccessNotification}
@@ -563,7 +679,6 @@ function App() {
         imageType={generatedImage?.type || 'blog'}
         onDownload={downloadCurrentImage}
         onPreview={() => {
-          // Scroll to preview section or open full preview
           const previewElement = document.querySelector('[data-preview]');
           if (previewElement) {
             previewElement.scrollIntoView({ behavior: 'smooth' });
@@ -578,6 +693,9 @@ function App() {
         imageType="blog"
         autoHide={true}
         duration={8000}
+        isBulkCompletion={true}
+        completedCount={bulkCompletionNotification.completed}
+        totalCount={bulkCompletionNotification.total}
         onPreview={() => {
           setShowHistorySidebar(true);
           setBulkCompletionNotification({ show: false, completed: 0, total: 0 });

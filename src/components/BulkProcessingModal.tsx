@@ -3,6 +3,7 @@ import { X, Upload, Download, AlertCircle, CheckCircle, Clock, Package, Plus, Tr
 import JSZip from 'jszip';
 import { sanitizeFormData, createSafeFilename } from '../utils/textSanitizer';
 import { HistoryImage } from '../types/history';
+import { User, deductCredits, saveImageGeneration } from '../lib/supabase';
 
 interface BulkItem {
   id: string;
@@ -22,9 +23,17 @@ interface BulkProcessingModalProps {
   onProgressUpdate?: (progress: { completed: number; total: number }) => void;
   onImageGenerated?: (image: HistoryImage) => void;
   onBulkCompleted?: (completedCount: number, totalCount: number) => void;
+  user?: User | null;
+  onRefreshUser?: () => void;
 }
 
 const WEBHOOK_URL = 'https://n8n.seoengine.agency/webhook/6e9e3b30-cb55-4d74-aa9d-68691983455f';
+
+// Credit costs
+const CREDIT_COSTS = {
+  blog: 5,
+  infographic: 10,
+};
 
 const PROCESSING_STEPS = [
   { text: "Understanding your request...", icon: Lightbulb, color: "text-yellow-500", bgColor: "bg-yellow-50" },
@@ -73,6 +82,8 @@ export const BulkProcessingModal: React.FC<BulkProcessingModalProps> = ({
   onProgressUpdate,
   onImageGenerated,
   onBulkCompleted,
+  user,
+  onRefreshUser,
 }) => {
   const [items, setItems] = useState<BulkItem[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -237,6 +248,36 @@ export const BulkProcessingModal: React.FC<BulkProcessingModalProps> = ({
       const result = await response.json();
 
       if (result.image) {
+        // Deduct credits for authenticated users
+        if (user && !user.isAnonymous) {
+          try {
+            await deductCredits(user.id, CREDIT_COSTS[item.type]);
+            onRefreshUser?.(); // Refresh user data to update credits
+          } catch (creditError) {
+            console.error('Error deducting credits:', creditError);
+            // Continue with image generation even if credit deduction fails
+          }
+        }
+
+        // Save to database for authenticated users
+        if (user && !user.isAnonymous) {
+          try {
+            await saveImageGeneration({
+              user_id: user.id,
+              image_type: item.type,
+              title: item.type === 'blog' ? item.data.title : undefined,
+              content: item.type === 'blog' ? item.data.intro : item.data.content,
+              style: finalStyle,
+              colour: finalColour,
+              credits_used: CREDIT_COSTS[item.type],
+              image_data: result.image,
+            });
+          } catch (dbError) {
+            console.error('Error saving to database:', dbError);
+            // Continue with local storage even if database save fails
+          }
+        }
+
         const completedItem = {
           ...item,
           status: 'completed' as const,
@@ -285,6 +326,15 @@ export const BulkProcessingModal: React.FC<BulkProcessingModalProps> = ({
     if (validItems.length === 0) {
       alert('Please fill out at least one complete form before processing.');
       return;
+    }
+
+    // Check if user has enough credits for all items
+    if (user && !user.isAnonymous) {
+      const totalCreditsNeeded = validItems.length * CREDIT_COSTS[imageType];
+      if (user.credits < totalCreditsNeeded) {
+        alert(`Insufficient credits. You need ${totalCreditsNeeded} credits to process ${validItems.length} ${imageType} images. You currently have ${user.credits} credits.`);
+        return;
+      }
     }
 
     setIsProcessing(true);
@@ -436,6 +486,10 @@ export const BulkProcessingModal: React.FC<BulkProcessingModalProps> = ({
     }
   }).length;
 
+  // Calculate total credits needed
+  const totalCreditsNeeded = validItemsCount * CREDIT_COSTS[imageType];
+  const hasEnoughCredits = !user || user.isAnonymous || user.credits >= totalCreditsNeeded;
+
   if (!isOpen) return null;
 
   return (
@@ -450,14 +504,28 @@ export const BulkProcessingModal: React.FC<BulkProcessingModalProps> = ({
             >
               <X className="w-5 h-5" />
             </button>
-            <div className="flex items-center">
-              <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-white/20 mr-4">
-                <Package className="w-6 h-6" />
+            <div className="flex items-center justify-between">
+              <div className="flex items-center">
+                <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-white/20 mr-4">
+                  <Package className="w-6 h-6" />
+                </div>
+                <div>
+                  <h2 className="text-2xl font-bold">Bulk Processing</h2>
+                  <p className="text-blue-100">Generate multiple {imageType} images at once</p>
+                </div>
               </div>
-              <div>
-                <h2 className="text-2xl font-bold">Bulk Processing</h2>
-                <p className="text-blue-100">Generate multiple {imageType} images at once</p>
-              </div>
+              {/* Credits Display */}
+              {user && !user.isAnonymous && (
+                <div className="text-right">
+                  <div className="text-sm text-blue-100">Available Credits</div>
+                  <div className="text-2xl font-bold">{user.credits}</div>
+                  {validItemsCount > 0 && (
+                    <div className="text-sm text-blue-200">
+                      Need: {totalCreditsNeeded} ({CREDIT_COSTS[imageType]} × {validItemsCount})
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 
@@ -468,6 +536,18 @@ export const BulkProcessingModal: React.FC<BulkProcessingModalProps> = ({
                 <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-3"></div>
                 <span className="text-sm font-medium">
                   Bulk processing is currently running. Please wait for completion before starting another process.
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* Credit Warning */}
+          {user && !user.isAnonymous && !hasEnoughCredits && validItemsCount > 0 && (
+            <div className="bg-red-50 border-b border-red-200 p-4 flex-shrink-0">
+              <div className="flex items-center text-red-700">
+                <AlertCircle className="w-4 h-4 mr-3" />
+                <span className="text-sm font-medium">
+                  Insufficient credits. You need {totalCreditsNeeded} credits but only have {user.credits}.
                 </span>
               </div>
             </div>
@@ -522,6 +602,9 @@ export const BulkProcessingModal: React.FC<BulkProcessingModalProps> = ({
                             <span className="font-semibold text-gray-900">
                               {imageType === 'blog' ? 'Blog Post' : 'Infographic'} #{index + 1}
                             </span>
+                            <div className="text-xs text-gray-500 mt-1">
+                              Cost: {CREDIT_COSTS[imageType]} credits
+                            </div>
                             {item.status === 'processing' && item.processingStep !== undefined && (
                               <div className={`mt-2 p-3 rounded-lg ${PROCESSING_STEPS[item.processingStep].bgColor} border border-opacity-20`}>
                                 <div className="flex items-center">
@@ -832,7 +915,7 @@ export const BulkProcessingModal: React.FC<BulkProcessingModalProps> = ({
               <div className="flex flex-col sm:flex-row gap-4">
                 <button
                   onClick={processBulkItems}
-                  disabled={isProcessing || validItemsCount === 0}
+                  disabled={isProcessing || validItemsCount === 0 || !hasEnoughCredits}
                   className="flex-1 py-3 px-6 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold hover:from-blue-700 hover:to-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300"
                 >
                   {isProcessing ? (
@@ -843,7 +926,7 @@ export const BulkProcessingModal: React.FC<BulkProcessingModalProps> = ({
                   ) : (
                     <div className="flex items-center justify-center">
                       <Upload className="w-5 h-5 mr-2" />
-                      Process All Items ({validItemsCount})
+                      Process All Items ({validItemsCount}) - {totalCreditsNeeded} Credits
                     </div>
                   )}
                 </button>
