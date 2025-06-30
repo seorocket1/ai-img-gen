@@ -126,8 +126,13 @@ function App() {
     setError(null);
     
     try {
+      console.log('Starting image generation process...');
+      console.log('Selected type:', selectedType);
+      console.log('Form data:', data);
+      
       // Sanitize the data before sending
       const sanitizedData = sanitizeFormData(data);
+      console.log('Sanitized data:', sanitizedData);
       
       // Prepare image detail with style and colour if provided
       let imageDetail = '';
@@ -151,7 +156,8 @@ function App() {
         image_detail: imageDetail,
       };
 
-      console.log('Sending to webhook:', payload);
+      console.log('Sending payload to webhook:', payload);
+      console.log('Webhook URL:', WEBHOOK_URL);
 
       const response = await fetch(WEBHOOK_URL, {
         method: 'POST',
@@ -162,119 +168,167 @@ function App() {
       });
 
       console.log('Response status:', response.status);
-      console.log('Response headers:', response.headers);
+      console.log('Response ok:', response.ok);
+      console.log('Response headers:', Object.fromEntries(response.headers.entries()));
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        throw new Error(`HTTP error! status: ${response.status} - ${response.statusText}`);
       }
 
       // Get response as text first to debug
       const responseText = await response.text();
-      console.log('Raw response:', responseText);
+      console.log('Raw response text:', responseText);
+      console.log('Response text length:', responseText.length);
+
+      if (!responseText || responseText.trim() === '') {
+        throw new Error('Empty response received from server');
+      }
 
       let result;
       try {
         result = JSON.parse(responseText);
+        console.log('Parsed JSON response:', result);
       } catch (parseError) {
         console.error('JSON parse error:', parseError);
-        console.log('Response was not valid JSON:', responseText);
-        throw new Error('Invalid response format from server');
+        console.log('Response was not valid JSON. Treating as plain text...');
+        
+        // If it's not JSON, maybe it's just the base64 string
+        if (responseText.length > 100 && (responseText.includes('/') || responseText.includes('+'))) {
+          console.log('Treating response as base64 string');
+          result = { image: responseText.trim() };
+        } else {
+          throw new Error(`Invalid response format. Expected JSON but got: ${responseText.substring(0, 100)}...`);
+        }
       }
 
-      console.log('Parsed webhook response:', result);
+      console.log('Processing result:', typeof result, result);
 
       // Check for different possible response formats
       let imageBase64 = null;
       
       // Try different possible property names for the image data
-      if (result.image) {
-        imageBase64 = result.image;
-      } else if (result.data && result.data.image) {
-        imageBase64 = result.data.image;
-      } else if (result.base64) {
-        imageBase64 = result.base64;
-      } else if (result.imageData) {
-        imageBase64 = result.imageData;
-      } else if (result.image_data) {
-        imageBase64 = result.image_data;
-      } else if (typeof result === 'string') {
+      if (result && typeof result === 'object') {
+        if (result.image) {
+          imageBase64 = result.image;
+          console.log('Found image in result.image');
+        } else if (result.data && result.data.image) {
+          imageBase64 = result.data.image;
+          console.log('Found image in result.data.image');
+        } else if (result.base64) {
+          imageBase64 = result.base64;
+          console.log('Found image in result.base64');
+        } else if (result.imageData) {
+          imageBase64 = result.imageData;
+          console.log('Found image in result.imageData');
+        } else if (result.image_data) {
+          imageBase64 = result.image_data;
+          console.log('Found image in result.image_data');
+        } else if (result.output) {
+          imageBase64 = result.output;
+          console.log('Found image in result.output');
+        } else {
+          console.log('Checking all properties of result:', Object.keys(result));
+          // Try to find any property that looks like base64
+          for (const [key, value] of Object.entries(result)) {
+            if (typeof value === 'string' && value.length > 100 && (value.includes('/') || value.includes('+'))) {
+              console.log(`Found potential base64 in property: ${key}`);
+              imageBase64 = value;
+              break;
+            }
+          }
+        }
+      } else if (typeof result === 'string' && result.length > 100) {
         // Sometimes the response might be just the base64 string
+        console.log('Treating entire result as base64 string');
         imageBase64 = result;
       }
 
-      console.log('Extracted image base64:', imageBase64 ? 'Found' : 'Not found');
+      console.log('Extracted image base64:', imageBase64 ? `Found (length: ${imageBase64.length})` : 'Not found');
 
-      if (imageBase64) {
-        // Clean the base64 string (remove data URL prefix if present)
-        if (imageBase64.startsWith('data:image/')) {
-          imageBase64 = imageBase64.split(',')[1];
-        }
-
-        console.log('Processing image with base64 length:', imageBase64.length);
-
-        // Deduct credits for authenticated users (only if Supabase is configured)
-        if (user && isAuthenticated && isSupabaseConfigured) {
-          try {
-            const { deductCredits } = await import('./lib/supabase');
-            await deductCredits(user.id, CREDIT_COSTS[selectedType]);
-            await refreshUser(); // Refresh user data to update credits
-          } catch (creditError) {
-            console.error('Error deducting credits:', creditError);
-            // Continue with image generation even if credit deduction fails
-          }
-        }
-
-        // Save to database for authenticated users (only if Supabase is configured)
-        if (user && isAuthenticated && isSupabaseConfigured) {
-          try {
-            const { saveImageGeneration } = await import('./lib/supabase');
-            await saveImageGeneration({
-              user_id: user.id,
-              image_type: selectedType,
-              title: selectedType === 'blog' ? sanitizedData.title : undefined,
-              content: selectedType === 'blog' ? sanitizedData.intro : sanitizedData.content,
-              style: sanitizedData.style,
-              colour: sanitizedData.colour,
-              credits_used: CREDIT_COSTS[selectedType],
-              image_data: imageBase64,
-            });
-          } catch (dbError) {
-            console.error('Error saving to database:', dbError);
-            // Continue with local storage even if database save fails
-          }
-        }
-
-        const newImage = {
-          base64: imageBase64,
-          type: selectedType as 'blog' | 'infographic',
-        };
-        
-        setGeneratedImage(newImage);
-        setCurrentStep('result');
-        
-        // Create history image object with proper structure
-        const historyImage = {
-          id: `img-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-          type: selectedType as 'blog' | 'infographic',
-          base64: imageBase64,
-          title: selectedType === 'blog' ? sanitizedData.title : 'Infographic',
-          content: selectedType === 'blog' ? sanitizedData.intro : sanitizedData.content,
-          timestamp: Date.now(),
-          style: sanitizedData.style || undefined,
-          colour: sanitizedData.colour || undefined,
-        };
-        
-        console.log('Adding image to history:', historyImage);
-        
-        // Add to history immediately
-        addToHistory(historyImage);
-        
-        // Show success notification
-        setShowSuccessNotification(true);
-      } else {
-        console.error('No image data found in response:', result);
+      if (!imageBase64) {
+        console.error('No image data found in response. Full response:', result);
         throw new Error('No image data received from the server. Please check the webhook response format.');
       }
+
+      // Clean the base64 string (remove data URL prefix if present)
+      if (imageBase64.startsWith('data:image/')) {
+        console.log('Removing data URL prefix');
+        imageBase64 = imageBase64.split(',')[1];
+      }
+
+      // Validate base64 string
+      if (imageBase64.length < 100) {
+        throw new Error('Received image data is too short to be valid');
+      }
+
+      console.log('Final base64 length:', imageBase64.length);
+
+      // Deduct credits for authenticated users (only if Supabase is configured)
+      if (user && isAuthenticated && isSupabaseConfigured) {
+        try {
+          console.log('Deducting credits for user:', user.id, 'Amount:', CREDIT_COSTS[selectedType]);
+          const { deductCredits } = await import('./lib/supabase');
+          const newCredits = await deductCredits(user.id, CREDIT_COSTS[selectedType]);
+          console.log('Credits deducted successfully. New balance:', newCredits);
+          await refreshUser(); // Refresh user data to update credits
+        } catch (creditError) {
+          console.error('Error deducting credits:', creditError);
+          // Continue with image generation even if credit deduction fails
+        }
+      }
+
+      // Save to database for authenticated users (only if Supabase is configured)
+      if (user && isAuthenticated && isSupabaseConfigured) {
+        try {
+          console.log('Saving image generation to database');
+          const { saveImageGeneration } = await import('./lib/supabase');
+          await saveImageGeneration({
+            user_id: user.id,
+            image_type: selectedType,
+            title: selectedType === 'blog' ? sanitizedData.title : undefined,
+            content: selectedType === 'blog' ? sanitizedData.intro : sanitizedData.content,
+            style: sanitizedData.style,
+            colour: sanitizedData.colour,
+            credits_used: CREDIT_COSTS[selectedType],
+            image_data: imageBase64,
+          });
+          console.log('Image generation saved to database successfully');
+        } catch (dbError) {
+          console.error('Error saving to database:', dbError);
+          // Continue with local storage even if database save fails
+        }
+      }
+
+      const newImage = {
+        base64: imageBase64,
+        type: selectedType as 'blog' | 'infographic',
+      };
+      
+      console.log('Setting generated image');
+      setGeneratedImage(newImage);
+      setCurrentStep('result');
+      
+      // Create history image object with proper structure
+      const historyImage = {
+        id: `img-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        type: selectedType as 'blog' | 'infographic',
+        base64: imageBase64,
+        title: selectedType === 'blog' ? sanitizedData.title : 'Infographic',
+        content: selectedType === 'blog' ? sanitizedData.intro : sanitizedData.content,
+        timestamp: Date.now(),
+        style: sanitizedData.style || undefined,
+        colour: sanitizedData.colour || undefined,
+      };
+      
+      console.log('Adding image to history:', historyImage.id);
+      
+      // Add to history immediately
+      addToHistory(historyImage);
+      
+      // Show success notification
+      setShowSuccessNotification(true);
+      
+      console.log('Image generation process completed successfully');
     } catch (error) {
       console.error('Error generating image:', error);
       let errorMessage = 'Failed to generate image. Please try again.';
@@ -283,7 +337,9 @@ function App() {
         if (error.message.includes('JSON')) {
           errorMessage = 'Invalid response format from server. Please contact support.';
         } else if (error.message.includes('HTTP error')) {
-          errorMessage = 'Server error occurred. Please try again later.';
+          errorMessage = `Server error: ${error.message}`;
+        } else if (error.message.includes('Empty response')) {
+          errorMessage = 'No response received from server. Please try again.';
         } else {
           errorMessage = error.message;
         }
