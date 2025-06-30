@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Sparkles, Zap, LogOut, User, History, Settings, CreditCard } from 'lucide-react';
+import { Sparkles, Zap, LogOut, User, History, Settings, CreditCard, AlertCircle } from 'lucide-react';
 import { ImageTypeSelector } from './components/ImageTypeSelector';
 import { BlogImageForm } from './components/BlogImageForm';
 import { InfographicForm } from './components/InfographicForm';
@@ -36,7 +36,7 @@ const CREDIT_COSTS = {
 };
 
 function App() {
-  const { user, isAuthenticated, isLoading: authLoading, signUp, signIn, signOut, refreshUser } = useSupabaseAuth();
+  const { user, isAuthenticated, isLoading: authLoading, error: authError, signUp, signIn, signOut, refreshUser, clearError } = useSupabaseAuth();
   const { addToHistory, history } = useImageHistory();
   const { 
     isProcessing, 
@@ -73,6 +73,14 @@ function App() {
       default: return 0;
     }
   };
+
+  // Clear auth errors when modals are opened
+  useEffect(() => {
+    if (showAuthModal || showSignUpModal) {
+      clearError();
+      setError(null);
+    }
+  }, [showAuthModal, showSignUpModal, clearError]);
 
   const handleTypeSelect = (type: 'blog' | 'infographic') => {
     setSelectedType(type);
@@ -331,6 +339,32 @@ function App() {
           </div>
           <h2 className="text-2xl font-bold text-gray-900 mb-2">SEO Engine</h2>
           <p className="text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show error screen if there's an authentication error
+  if (authError) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center">
+        <div className="text-center max-w-md mx-auto p-6">
+          <div className="flex items-center justify-center w-16 h-16 rounded-2xl bg-red-100 mx-auto mb-4">
+            <AlertCircle className="w-8 h-8 text-red-600" />
+          </div>
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">Connection Error</h2>
+          <p className="text-gray-600 mb-4">{authError}</p>
+          <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-4">
+            <p className="text-sm text-blue-800">
+              <strong>To fix this:</strong> Please click the "Connect to Supabase" button in the top right corner to set up your database connection.
+            </p>
+          </div>
+          <button
+            onClick={() => window.location.reload()}
+            className="px-6 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors"
+          >
+            Retry Connection
+          </button>
         </div>
       </div>
     );
