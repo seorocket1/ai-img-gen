@@ -3,32 +3,11 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-// Create a fallback client if environment variables are missing
-let supabase: any;
-
-if (supabaseUrl && supabaseAnonKey) {
-  supabase = createClient(supabaseUrl, supabaseAnonKey);
-} else {
-  console.warn('Supabase environment variables are missing. Database features will not work.');
-  // Create a mock client that throws helpful errors
-  supabase = {
-    auth: {
-      signUp: () => Promise.reject(new Error('Supabase not configured')),
-      signInWithPassword: () => Promise.reject(new Error('Supabase not configured')),
-      signOut: () => Promise.reject(new Error('Supabase not configured')),
-      getUser: () => Promise.reject(new Error('Supabase not configured')),
-      onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }),
-    },
-    from: () => ({
-      select: () => Promise.reject(new Error('Supabase not configured')),
-      insert: () => Promise.reject(new Error('Supabase not configured')),
-      update: () => Promise.reject(new Error('Supabase not configured')),
-      delete: () => Promise.reject(new Error('Supabase not configured')),
-    }),
-  };
+if (!supabaseUrl || !supabaseAnonKey) {
+  throw new Error('Missing Supabase environment variables. Please configure VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.');
 }
 
-export { supabase };
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 // Database types
 export interface User {
@@ -57,11 +36,6 @@ export interface ImageGeneration {
   created_at: string;
 }
 
-// Helper function to check if Supabase is configured
-const isSupabaseConfigured = () => {
-  return !!(supabaseUrl && supabaseAnonKey);
-};
-
 // Auth functions
 export const signUp = async (userData: {
   email: string;
@@ -71,10 +45,6 @@ export const signUp = async (userData: {
   user_id: string;
   password: string;
 }) => {
-  if (!isSupabaseConfigured()) {
-    throw new Error('Database connection not configured. Please connect to Supabase first.');
-  }
-
   try {
     // First create the auth user
     const { data: authData, error: authError } = await supabase.auth.signUp({
@@ -113,10 +83,6 @@ export const signUp = async (userData: {
 };
 
 export const signIn = async (email: string, password: string) => {
-  if (!isSupabaseConfigured()) {
-    throw new Error('Database connection not configured. Please connect to Supabase first.');
-  }
-
   try {
     const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
       email,
@@ -146,19 +112,11 @@ export const signIn = async (email: string, password: string) => {
 };
 
 export const signOut = async () => {
-  if (!isSupabaseConfigured()) {
-    return; // Silently succeed if not configured
-  }
-
   const { error } = await supabase.auth.signOut();
   if (error) throw error;
 };
 
 export const getCurrentUser = async () => {
-  if (!isSupabaseConfigured()) {
-    return null;
-  }
-
   try {
     const { data: { user: authUser } } = await supabase.auth.getUser();
     
@@ -181,10 +139,6 @@ export const getCurrentUser = async () => {
 
 // Credit functions
 export const deductCredits = async (userId: string, amount: number) => {
-  if (!isSupabaseConfigured()) {
-    throw new Error('Database connection not configured');
-  }
-
   try {
     const { data, error } = await supabase
       .from('users')
@@ -202,10 +156,6 @@ export const deductCredits = async (userId: string, amount: number) => {
 };
 
 export const addCredits = async (userId: string, amount: number) => {
-  if (!isSupabaseConfigured()) {
-    throw new Error('Database connection not configured');
-  }
-
   try {
     const { data, error } = await supabase
       .from('users')
@@ -233,10 +183,6 @@ export const saveImageGeneration = async (imageData: {
   credits_used: number;
   image_data: string;
 }) => {
-  if (!isSupabaseConfigured()) {
-    throw new Error('Database connection not configured');
-  }
-
   try {
     const { data, error } = await supabase
       .from('image_generations')
@@ -253,10 +199,6 @@ export const saveImageGeneration = async (imageData: {
 };
 
 export const getUserImageGenerations = async (userId: string) => {
-  if (!isSupabaseConfigured()) {
-    throw new Error('Database connection not configured');
-  }
-
   try {
     const { data, error } = await supabase
       .from('image_generations')
@@ -274,10 +216,6 @@ export const getUserImageGenerations = async (userId: string) => {
 
 // Admin functions
 export const getAllUsers = async () => {
-  if (!isSupabaseConfigured()) {
-    throw new Error('Database connection not configured');
-  }
-
   try {
     const { data, error } = await supabase
       .from('users')
@@ -293,10 +231,6 @@ export const getAllUsers = async () => {
 };
 
 export const updateUserCredits = async (userId: string, credits: number) => {
-  if (!isSupabaseConfigured()) {
-    throw new Error('Database connection not configured');
-  }
-
   try {
     const { data, error } = await supabase
       .from('users')
@@ -314,10 +248,6 @@ export const updateUserCredits = async (userId: string, credits: number) => {
 };
 
 export const getAllImageGenerations = async () => {
-  if (!isSupabaseConfigured()) {
-    throw new Error('Database connection not configured');
-  }
-
   try {
     const { data, error } = await supabase
       .from('image_generations')

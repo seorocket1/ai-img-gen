@@ -17,7 +17,6 @@ import { useSupabaseAuth } from './hooks/useSupabaseAuth';
 import { useImageHistory } from './hooks/useImageHistory';
 import { useProcessingState } from './hooks/useProcessingState';
 import { sanitizeFormData } from './utils/textSanitizer';
-import { deductCredits, saveImageGeneration } from './lib/supabase';
 
 type Step = 'select' | 'form' | 'result';
 type ImageType = 'blog' | 'infographic' | null;
@@ -169,9 +168,10 @@ function App() {
       console.log('Webhook response:', result);
 
       if (result.image) {
-        // Deduct credits for authenticated users
+        // Deduct credits for authenticated users (only if Supabase is configured)
         if (user && !user.isAnonymous) {
           try {
+            const { deductCredits } = await import('./lib/supabase');
             await deductCredits(user.id, CREDIT_COSTS[selectedType]);
             await refreshUser(); // Refresh user data to update credits
           } catch (creditError) {
@@ -180,9 +180,10 @@ function App() {
           }
         }
 
-        // Save to database for authenticated users
+        // Save to database for authenticated users (only if Supabase is configured)
         if (user && !user.isAnonymous) {
           try {
+            const { saveImageGeneration } = await import('./lib/supabase');
             await saveImageGeneration({
               user_id: user.id,
               image_type: selectedType,
