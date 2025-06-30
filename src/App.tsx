@@ -113,6 +113,113 @@ function App() {
     return true;
   };
 
+  // Enhanced function to extract base64 image data from various response formats
+  const extractImageData = (responseData: any, responseText: string): string | null => {
+    console.log('=== EXTRACTING IMAGE DATA ===');
+    console.log('Response data type:', typeof responseData);
+    console.log('Response data:', responseData);
+    console.log('Response text length:', responseText.length);
+
+    let imageBase64 = null;
+
+    // Method 1: Check if responseData is an object with image properties
+    if (responseData && typeof responseData === 'object') {
+      console.log('Checking object properties for image data...');
+      
+      // Common property names for image data
+      const imageProperties = [
+        'image', 'data', 'base64', 'imageData', 'image_data', 'output', 
+        'result', 'response', 'file', 'content', 'body', 'payload'
+      ];
+      
+      for (const prop of imageProperties) {
+        if (responseData[prop]) {
+          console.log(`Found potential image data in property: ${prop}`);
+          const value = responseData[prop];
+          
+          // Check if it's a string that looks like base64
+          if (typeof value === 'string' && value.length > 100) {
+            const base64Regex = /^[A-Za-z0-9+/]*={0,2}$/;
+            const cleanValue = value.replace(/^data:image\/[^;]+;base64,/, '');
+            if (base64Regex.test(cleanValue)) {
+              console.log(`Valid base64 found in ${prop}`);
+              imageBase64 = cleanValue;
+              break;
+            }
+          }
+          
+          // Check if it's a nested object
+          if (typeof value === 'object' && value.image) {
+            console.log(`Found nested image in ${prop}.image`);
+            const nestedValue = value.image;
+            if (typeof nestedValue === 'string' && nestedValue.length > 100) {
+              const base64Regex = /^[A-Za-z0-9+/]*={0,2}$/;
+              const cleanValue = nestedValue.replace(/^data:image\/[^;]+;base64,/, '');
+              if (base64Regex.test(cleanValue)) {
+                console.log(`Valid base64 found in ${prop}.image`);
+                imageBase64 = cleanValue;
+                break;
+              }
+            }
+          }
+        }
+      }
+
+      // Method 2: Check for any string property that looks like base64
+      if (!imageBase64) {
+        console.log('Searching all string properties for base64-like content...');
+        for (const [key, value] of Object.entries(responseData)) {
+          if (typeof value === 'string' && value.length > 100) {
+            const base64Regex = /^[A-Za-z0-9+/]*={0,2}$/;
+            const cleanValue = value.replace(/^data:image\/[^;]+;base64,/, '');
+            if (base64Regex.test(cleanValue)) {
+              console.log(`Found potential base64 in property: ${key}`);
+              imageBase64 = cleanValue;
+              break;
+            }
+          }
+        }
+      }
+    }
+
+    // Method 3: Check if the entire response text is base64
+    if (!imageBase64 && responseText && responseText.length > 100) {
+      console.log('Checking if entire response is base64...');
+      const base64Regex = /^[A-Za-z0-9+/]*={0,2}$/;
+      const cleanText = responseText.replace(/^data:image\/[^;]+;base64,/, '').trim();
+      if (base64Regex.test(cleanText)) {
+        console.log('Entire response appears to be base64');
+        imageBase64 = cleanText;
+      }
+    }
+
+    // Method 4: Look for base64 patterns within the response text
+    if (!imageBase64) {
+      console.log('Searching for base64 patterns in response text...');
+      // Look for data URLs
+      const dataUrlMatch = responseText.match(/data:image\/[^;]+;base64,([A-Za-z0-9+/]*={0,2})/);
+      if (dataUrlMatch && dataUrlMatch[1] && dataUrlMatch[1].length > 100) {
+        console.log('Found base64 in data URL pattern');
+        imageBase64 = dataUrlMatch[1];
+      } else {
+        // Look for standalone base64 strings (at least 1000 characters, typical for images)
+        const base64Match = responseText.match(/([A-Za-z0-9+/]{1000,}={0,2})/);
+        if (base64Match && base64Match[1]) {
+          console.log('Found standalone base64 pattern');
+          imageBase64 = base64Match[1];
+        }
+      }
+    }
+
+    console.log('Image extraction result:', {
+      found: !!imageBase64,
+      length: imageBase64 ? imageBase64.length : 0,
+      firstChars: imageBase64 ? imageBase64.substring(0, 50) : 'none'
+    });
+
+    return imageBase64;
+  };
+
   const handleFormSubmit = async (data: any) => {
     if (!selectedType) return;
 
@@ -121,10 +228,6 @@ function App() {
       return;
     }
 
-    setIsProcessing(true);
-    setFormData(data);
-    setError(null);
-    
     // Create abort controller for the request
     const controller = new AbortController();
     
@@ -132,13 +235,17 @@ function App() {
     const requestTimeout = setTimeout(() => {
       controller.abort();
       console.error('Request aborted due to timeout');
-    }, 60000); // 60 seconds for the actual request
+    }, 90000); // Increased to 90 seconds for the actual request
     
     const overallTimeout = setTimeout(() => {
-      console.error('Overall timeout after 90 seconds');
+      console.error('Overall timeout after 120 seconds');
       setError('Request timed out. The image generation service may be experiencing high load. Please try again in a few minutes.');
       setIsProcessing(false);
-    }, 90000); // 90 seconds overall timeout
+    }, 120000); // 2 minutes overall timeout
+
+    setIsProcessing(true);
+    setFormData(data);
+    setError(null);
     
     try {
       console.log('=== STARTING IMAGE GENERATION ===');
@@ -246,61 +353,14 @@ function App() {
         console.log('Full result:', result);
       } catch (parseError) {
         console.error('JSON parse error:', parseError);
-        console.log('Response was not valid JSON. Checking if it might be base64...');
+        console.log('Response was not valid JSON. Treating as raw data...');
         
-        // Check if the response looks like base64
-        const base64Regex = /^[A-Za-z0-9+/]*={0,2}$/;
-        if (responseText.length > 100 && base64Regex.test(responseText.trim())) {
-          console.log('Response appears to be base64 string');
-          result = { image: responseText.trim() };
-        } else {
-          throw new Error(`Invalid response format from image generation service. Expected JSON or base64 image data. Response: ${responseText.substring(0, 200)}...`);
-        }
+        // If it's not JSON, treat the entire response as potential image data
+        result = responseText.trim();
       }
 
-      console.log('=== EXTRACTING IMAGE DATA ===');
-
-      // Check for different possible response formats
-      let imageBase64 = null;
-      
-      // Try different possible property names for the image data
-      if (result && typeof result === 'object') {
-        const possibleKeys = ['image', 'data', 'base64', 'imageData', 'image_data', 'output', 'result', 'response'];
-        
-        for (const key of possibleKeys) {
-          if (result[key]) {
-            console.log(`Found image data in property: ${key}`);
-            imageBase64 = result[key];
-            break;
-          }
-          
-          // Check nested objects
-          if (result[key] && typeof result[key] === 'object' && result[key].image) {
-            console.log(`Found image data in nested property: ${key}.image`);
-            imageBase64 = result[key].image;
-            break;
-          }
-        }
-        
-        // If still not found, look for any string property that looks like base64
-        if (!imageBase64) {
-          console.log('Searching all properties for base64-like strings...');
-          for (const [key, value] of Object.entries(result)) {
-            if (typeof value === 'string' && value.length > 100) {
-              const base64Regex = /^[A-Za-z0-9+/]*={0,2}$/;
-              if (base64Regex.test(value)) {
-                console.log(`Found potential base64 in property: ${key}`);
-                imageBase64 = value;
-                break;
-              }
-            }
-          }
-        }
-      } else if (typeof result === 'string' && result.length > 100) {
-        // Sometimes the response might be just the base64 string
-        console.log('Treating entire result as base64 string');
-        imageBase64 = result;
-      }
+      // Use enhanced image extraction function
+      const imageBase64 = extractImageData(result, responseText);
 
       console.log('=== IMAGE DATA VALIDATION ===');
       console.log('Image base64 found:', !!imageBase64);
@@ -309,17 +369,12 @@ function App() {
       if (!imageBase64) {
         console.error('=== NO IMAGE DATA FOUND ===');
         console.error('Full response structure:', JSON.stringify(result, null, 2));
+        console.error('Response text sample:', responseText.substring(0, 1000));
         throw new Error('No image data found in response. The image generation service may have failed. Please try again.');
       }
 
-      // Clean the base64 string (remove data URL prefix if present)
-      if (imageBase64.startsWith('data:image/')) {
-        console.log('Removing data URL prefix');
-        imageBase64 = imageBase64.split(',')[1];
-      }
-
-      // Validate base64 string
-      if (imageBase64.length < 100) {
+      // Validate base64 string length
+      if (imageBase64.length < 1000) {
         throw new Error('Received image data is too short to be valid. Please try again.');
       }
 
