@@ -21,17 +21,30 @@ export const SuccessNotification: React.FC<SuccessNotificationProps> = ({
   duration = 5000,
 }) => {
   const [isAnimating, setIsAnimating] = useState(false);
+  const [progress, setProgress] = useState(100);
 
   useEffect(() => {
     if (isVisible) {
       setIsAnimating(true);
+      setProgress(100);
       
       if (autoHide) {
+        // Start progress countdown
+        const progressInterval = setInterval(() => {
+          setProgress(prev => {
+            const newProgress = prev - (100 / (duration / 100));
+            return Math.max(0, newProgress);
+          });
+        }, 100);
+
         const timer = setTimeout(() => {
           handleClose();
         }, duration);
         
-        return () => clearTimeout(timer);
+        return () => {
+          clearTimeout(timer);
+          clearInterval(progressInterval);
+        };
       }
     }
   }, [isVisible, autoHide, duration]);
@@ -101,22 +114,12 @@ export const SuccessNotification: React.FC<SuccessNotificationProps> = ({
         {autoHide && (
           <div className="mt-3 w-full bg-gray-200 rounded-full h-1">
             <div 
-              className="bg-green-500 h-1 rounded-full transition-all ease-linear"
-              style={{ 
-                width: '100%',
-                animation: `shrink ${duration}ms linear forwards`
-              }}
+              className="bg-green-500 h-1 rounded-full transition-all duration-100 ease-linear"
+              style={{ width: `${progress}%` }}
             />
           </div>
         )}
       </div>
-      
-      <style jsx>{`
-        @keyframes shrink {
-          from { width: 100%; }
-          to { width: 0%; }
-        }
-      `}</style>
     </div>
   );
 };

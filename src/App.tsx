@@ -136,7 +136,7 @@ function App() {
         setGeneratedImage(newImage);
         setCurrentStep('result');
         
-        // Add to history immediately
+        // Create history image object with proper structure
         const historyImage = {
           id: `img-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
           type: selectedType as 'blog' | 'infographic',
@@ -144,10 +144,13 @@ function App() {
           title: selectedType === 'blog' ? sanitizedData.title : 'Infographic',
           content: selectedType === 'blog' ? sanitizedData.intro : sanitizedData.content,
           timestamp: Date.now(),
-          style: sanitizedData.style,
-          colour: sanitizedData.colour,
+          style: sanitizedData.style || undefined,
+          colour: sanitizedData.colour || undefined,
         };
         
+        console.log('Adding image to history:', historyImage);
+        
+        // Add to history immediately
         addToHistory(historyImage);
         
         // Show success notification
@@ -474,7 +477,7 @@ function App() {
             </div>
 
             {/* Right Side - Preview */}
-            <div className="bg-white rounded-2xl shadow-xl border border-gray-200/50 overflow-hidden">
+            <div className="bg-white rounded-2xl shadow-xl border border-gray-200/50 overflow-hidden" data-preview>
               <ImagePreview
                 isLoading={isProcessing}
                 generatedImage={generatedImage}
