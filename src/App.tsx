@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Sparkles, Zap, LogOut, User, History, Settings, CreditCard, AlertCircle } from 'lucide-react';
+import { Sparkles, Zap, LogOut, User, History, Settings, CreditCard, AlertCircle, Brain, Palette, Wand2, ArrowRight, Star, Layers, Cpu, Image as ImageIcon } from 'lucide-react';
 import { ImageTypeSelector } from './components/ImageTypeSelector';
 import { BlogImageForm } from './components/BlogImageForm';
 import { InfographicForm } from './components/InfographicForm';
@@ -636,85 +636,243 @@ function App() {
   // Show authentication screen if not authenticated
   if (!isAuthenticated) {
     return (
-      <div className="h-screen bg-black relative overflow-hidden flex flex-col">
-        <DreamscapeBackground />
-        
+      <div className="min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900 relative overflow-hidden">
+        {/* Animated Background Elements */}
+        <div className="absolute inset-0">
+          {/* Floating Orbs */}
+          <div className="absolute top-20 left-20 w-32 h-32 bg-gradient-to-r from-blue-400/20 to-cyan-400/20 rounded-full blur-xl animate-pulse"></div>
+          <div className="absolute top-40 right-32 w-24 h-24 bg-gradient-to-r from-purple-400/20 to-pink-400/20 rounded-full blur-xl animate-pulse delay-1000"></div>
+          <div className="absolute bottom-32 left-32 w-40 h-40 bg-gradient-to-r from-green-400/20 to-blue-400/20 rounded-full blur-xl animate-pulse delay-2000"></div>
+          <div className="absolute bottom-20 right-20 w-28 h-28 bg-gradient-to-r from-yellow-400/20 to-orange-400/20 rounded-full blur-xl animate-pulse delay-3000"></div>
+          
+          {/* Neural Network Lines */}
+          <svg className="absolute inset-0 w-full h-full opacity-10" viewBox="0 0 1000 1000">
+            <defs>
+              <linearGradient id="lineGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stopColor="#3B82F6" />
+                <stop offset="50%" stopColor="#8B5CF6" />
+                <stop offset="100%" stopColor="#EC4899" />
+              </linearGradient>
+            </defs>
+            <path d="M100,200 Q300,100 500,200 T900,200" stroke="url(#lineGradient)" strokeWidth="2" fill="none" className="animate-pulse" />
+            <path d="M200,400 Q400,300 600,400 T1000,400" stroke="url(#lineGradient)" strokeWidth="2" fill="none" className="animate-pulse delay-500" />
+            <path d="M50,600 Q250,500 450,600 T850,600" stroke="url(#lineGradient)" strokeWidth="2" fill="none" className="animate-pulse delay-1000" />
+            <circle cx="200" cy="200" r="4" fill="#3B82F6" className="animate-pulse" />
+            <circle cx="500" cy="200" r="4" fill="#8B5CF6" className="animate-pulse delay-300" />
+            <circle cx="800" cy="200" r="4" fill="#EC4899" className="animate-pulse delay-600" />
+          </svg>
+        </div>
+
         {/* Header */}
-        <header className="bg-black/20 backdrop-blur-xl border-b border-white/10 relative z-10 flex-shrink-0">
+        <header className="relative z-10 bg-black/10 backdrop-blur-xl border-b border-white/10">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center">
-                <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-gradient-to-r from-blue-500 to-purple-600 mr-3 shadow-lg">
-                  <Sparkles className="w-5 h-5 text-white" />
+                <div className="flex items-center justify-center w-12 h-12 rounded-2xl bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 mr-4 shadow-2xl">
+                  <Brain className="w-6 h-6 text-white" />
                 </div>
                 <div>
-                  <h1 className="text-xl font-bold text-white">AI Image Generator</h1>
-                  <p className="text-sm text-blue-200 hidden sm:block">Create stunning visuals with AI</p>
+                  <h1 className="text-2xl font-bold bg-gradient-to-r from-white to-blue-200 bg-clip-text text-transparent">
+                    AI Image Generator
+                  </h1>
+                  <p className="text-sm text-blue-200/80 hidden sm:block">Powered by Advanced Neural Networks</p>
                 </div>
               </div>
               <button
                 onClick={() => setShowAuthModal(true)}
-                className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-blue-500 to-purple-600 text-white font-semibold hover:from-blue-600 hover:to-purple-700 transition-all duration-300 transform hover:scale-105 shadow-lg"
+                className="px-6 py-3 rounded-2xl bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 text-white font-semibold hover:shadow-2xl hover:shadow-purple-500/25 transition-all duration-300 transform hover:scale-105 border border-white/20"
               >
+                <User className="w-4 h-4 mr-2 inline" />
                 Sign In
               </button>
             </div>
           </div>
         </header>
 
-        {/* Hero Section - Perfectly Centered */}
-        <main className="flex-1 flex items-center justify-center relative z-10 px-4 sm:px-6">
-          <div className="text-center max-w-5xl mx-auto">
-            {/* Main Icon */}
-            <div className="flex items-center justify-center w-24 h-24 rounded-3xl bg-gradient-to-r from-blue-500 via-purple-600 to-pink-600 mx-auto mb-8 shadow-2xl animate-pulse">
-              <Sparkles className="w-12 h-12 text-white" />
+        {/* Hero Section */}
+        <main className="relative z-10 flex-1 flex items-center justify-center px-4 sm:px-6 py-20">
+          <div className="text-center max-w-6xl mx-auto">
+            {/* Main Icon with Animation */}
+            <div className="relative mb-12">
+              <div className="flex items-center justify-center w-32 h-32 rounded-3xl bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 mx-auto shadow-2xl shadow-purple-500/25 animate-pulse">
+                <Sparkles className="w-16 h-16 text-white" />
+              </div>
+              {/* Floating Elements Around Icon */}
+              <div className="absolute -top-4 -left-4 w-8 h-8 bg-blue-400 rounded-full opacity-60 animate-bounce"></div>
+              <div className="absolute -top-2 -right-6 w-6 h-6 bg-purple-400 rounded-full opacity-60 animate-bounce delay-300"></div>
+              <div className="absolute -bottom-4 -left-6 w-10 h-10 bg-pink-400 rounded-full opacity-60 animate-bounce delay-700"></div>
+              <div className="absolute -bottom-2 -right-4 w-7 h-7 bg-cyan-400 rounded-full opacity-60 animate-bounce delay-1000"></div>
             </div>
             
-            {/* Main Heading */}
-            <h1 className="text-5xl sm:text-7xl font-bold mb-6 bg-gradient-to-r from-blue-400 via-purple-500 to-pink-500 bg-clip-text text-transparent leading-tight">
-              AI Image Generator
+            {/* Main Heading with Gradient Text */}
+            <h1 className="text-6xl sm:text-8xl font-black mb-8 leading-tight">
+              <span className="bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
+                AI Image
+              </span>
+              <br />
+              <span className="bg-gradient-to-r from-pink-400 via-purple-400 to-blue-400 bg-clip-text text-transparent">
+                Generator
+              </span>
             </h1>
             
-            {/* Subtitle */}
-            <p className="text-xl sm:text-2xl text-white/90 mb-8 max-w-4xl mx-auto leading-relaxed">
-              Create stunning blog featured images and infographics with the power of AI
+            {/* Subtitle with Typewriter Effect */}
+            <p className="text-2xl sm:text-3xl text-white/90 mb-12 max-w-4xl mx-auto leading-relaxed font-light">
+              Transform your ideas into stunning visuals with the power of 
+              <span className="bg-gradient-to-r from-cyan-400 to-blue-400 bg-clip-text text-transparent font-semibold"> Artificial Intelligence</span>
             </p>
             
-            {/* Feature Pills */}
-            <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-12">
-              <div className="flex items-center px-4 py-2 bg-white/10 backdrop-blur-sm rounded-full border border-white/20 text-white">
-                <Zap className="w-5 h-5 mr-2 text-blue-400" />
-                Powered by{' '}
-                <a 
-                  href="https://seoengine.agency/" 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="ml-1 font-semibold text-blue-300 hover:text-blue-200 transition-colors"
-                >
-                  SEO Engine
-                </a>
+            {/* Feature Pills with Icons */}
+            <div className="flex flex-wrap justify-center items-center gap-6 mb-16">
+              <div className="flex items-center px-6 py-3 bg-white/10 backdrop-blur-sm rounded-2xl border border-white/20 text-white shadow-lg">
+                <Brain className="w-5 h-5 mr-3 text-blue-400" />
+                <span className="font-medium">Neural Networks</span>
               </div>
-              <div className="hidden sm:block w-2 h-2 bg-white/30 rounded-full"></div>
-              <div className="flex items-center px-4 py-2 bg-white/10 backdrop-blur-sm rounded-full border border-white/20 text-white">
-                <Sparkles className="w-5 h-5 mr-2 text-purple-400" />
-                Professional Quality
+              <div className="flex items-center px-6 py-3 bg-white/10 backdrop-blur-sm rounded-2xl border border-white/20 text-white shadow-lg">
+                <Palette className="w-5 h-5 mr-3 text-purple-400" />
+                <span className="font-medium">Creative AI</span>
               </div>
-              <div className="hidden sm:block w-2 h-2 bg-white/30 rounded-full"></div>
-              <div className="flex items-center px-4 py-2 bg-white/10 backdrop-blur-sm rounded-full border border-white/20 text-white">
-                <CreditCard className="w-5 h-5 mr-2 text-green-400" />
-                {isSupabaseConfigured ? '100 Free Credits' : 'Free to Use'}
+              <div className="flex items-center px-6 py-3 bg-white/10 backdrop-blur-sm rounded-2xl border border-white/20 text-white shadow-lg">
+                <Zap className="w-5 h-5 mr-3 text-yellow-400" />
+                <span className="font-medium">Lightning Fast</span>
+              </div>
+              <div className="flex items-center px-6 py-3 bg-white/10 backdrop-blur-sm rounded-2xl border border-white/20 text-white shadow-lg">
+                <Star className="w-5 h-5 mr-3 text-pink-400" />
+                <span className="font-medium">Professional Quality</span>
+              </div>
+            </div>
+
+            {/* Stats Section */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-8 mb-16 max-w-4xl mx-auto">
+              <div className="text-center">
+                <div className="text-4xl font-bold bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent mb-2">10K+</div>
+                <div className="text-white/70">Images Generated</div>
+              </div>
+              <div className="text-center">
+                <div className="text-4xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent mb-2">99.9%</div>
+                <div className="text-white/70">Uptime</div>
+              </div>
+              <div className="text-center">
+                <div className="text-4xl font-bold bg-gradient-to-r from-green-400 to-blue-400 bg-clip-text text-transparent mb-2">30s</div>
+                <div className="text-white/70">Average Generation</div>
               </div>
             </div>
             
-            {/* CTA Button */}
-            <button
-              onClick={() => setShowAuthModal(true)}
-              className="px-10 py-4 rounded-xl bg-gradient-to-r from-blue-500 via-purple-600 to-pink-600 text-white font-bold hover:from-blue-600 hover:via-purple-700 hover:to-pink-700 transition-all duration-300 transform hover:scale-105 shadow-2xl text-lg border border-white/20"
-            >
-              Get Started Free
-            </button>
+            {/* CTA Buttons */}
+            <div className="flex flex-col sm:flex-row gap-6 justify-center items-center">
+              <button
+                onClick={() => setShowSignUpModal(true)}
+                className="group px-12 py-5 rounded-2xl bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 text-white font-bold text-lg hover:shadow-2xl hover:shadow-purple-500/25 transition-all duration-300 transform hover:scale-105 border border-white/20 relative overflow-hidden"
+              >
+                <div className="absolute inset-0 bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                <div className="relative flex items-center">
+                  <Wand2 className="w-6 h-6 mr-3" />
+                  Start Creating Free
+                  <ArrowRight className="w-5 h-5 ml-3 group-hover:translate-x-1 transition-transform duration-300" />
+                </div>
+              </button>
+              
+              <button
+                onClick={() => setShowAuthModal(true)}
+                className="px-12 py-5 rounded-2xl bg-white/10 backdrop-blur-sm text-white font-semibold text-lg hover:bg-white/20 transition-all duration-300 border border-white/20 flex items-center"
+              >
+                <User className="w-5 h-5 mr-3" />
+                Sign In
+              </button>
+            </div>
+
+            {/* Credit Info */}
+            <div className="mt-12 flex items-center justify-center">
+              <div className="flex items-center px-6 py-3 bg-green-500/20 backdrop-blur-sm rounded-2xl border border-green-400/30 text-green-300">
+                <CreditCard className="w-5 h-5 mr-3" />
+                <span className="font-medium">
+                  {isSupabaseConfigured ? '100 Free Credits on Sign Up' : 'Free to Use - No Registration Required'}
+                </span>
+              </div>
+            </div>
           </div>
         </main>
+
+        {/* Features Section */}
+        <section className="relative z-10 py-20 bg-black/20 backdrop-blur-sm border-t border-white/10">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6">
+            <div className="text-center mb-16">
+              <h2 className="text-4xl font-bold bg-gradient-to-r from-white to-blue-200 bg-clip-text text-transparent mb-4">
+                Powered by Advanced AI
+              </h2>
+              <p className="text-xl text-white/70 max-w-3xl mx-auto">
+                Our cutting-edge neural networks understand your vision and create stunning visuals that exceed expectations
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+              <div className="text-center p-6 bg-white/5 backdrop-blur-sm rounded-2xl border border-white/10 hover:bg-white/10 transition-all duration-300">
+                <div className="w-16 h-16 bg-gradient-to-r from-blue-500 to-cyan-500 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                  <ImageIcon className="w-8 h-8 text-white" />
+                </div>
+                <h3 className="text-xl font-semibold text-white mb-2">Blog Images</h3>
+                <p className="text-white/70">Create engaging featured images for your blog posts</p>
+              </div>
+
+              <div className="text-center p-6 bg-white/5 backdrop-blur-sm rounded-2xl border border-white/10 hover:bg-white/10 transition-all duration-300">
+                <div className="w-16 h-16 bg-gradient-to-r from-purple-500 to-pink-500 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                  <Layers className="w-8 h-8 text-white" />
+                </div>
+                <h3 className="text-xl font-semibold text-white mb-2">Infographics</h3>
+                <p className="text-white/70">Transform data into beautiful visual stories</p>
+              </div>
+
+              <div className="text-center p-6 bg-white/5 backdrop-blur-sm rounded-2xl border border-white/10 hover:bg-white/10 transition-all duration-300">
+                <div className="w-16 h-16 bg-gradient-to-r from-green-500 to-blue-500 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                  <Cpu className="w-8 h-8 text-white" />
+                </div>
+                <h3 className="text-xl font-semibold text-white mb-2">AI Powered</h3>
+                <p className="text-white/70">Advanced machine learning for perfect results</p>
+              </div>
+
+              <div className="text-center p-6 bg-white/5 backdrop-blur-sm rounded-2xl border border-white/10 hover:bg-white/10 transition-all duration-300">
+                <div className="w-16 h-16 bg-gradient-to-r from-yellow-500 to-orange-500 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                  <Zap className="w-8 h-8 text-white" />
+                </div>
+                <h3 className="text-xl font-semibold text-white mb-2">Instant Results</h3>
+                <p className="text-white/70">Generate professional images in seconds</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Footer */}
+        <footer className="relative z-10 bg-black/30 backdrop-blur-sm border-t border-white/10 py-12">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 text-center">
+            <div className="flex items-center justify-center mb-6">
+              <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-gradient-to-r from-blue-500 to-purple-500 mr-3">
+                <Sparkles className="w-5 h-5 text-white" />
+              </div>
+              <a 
+                href="https://seoengine.agency/" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent hover:from-blue-300 hover:to-purple-300 transition-all duration-300"
+              >
+                SEO Engine
+              </a>
+            </div>
+            <p className="text-white/70 mb-4">
+              Empowering creators with AI-driven visual solutions
+            </p>
+            <p className="text-sm text-white/50">
+              © 2025{' '}
+              <a 
+                href="https://seoengine.agency/" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="text-blue-400 hover:text-blue-300 transition-colors"
+              >
+                SEO Engine
+              </a>
+              . All rights reserved. | Transforming imagination into reality.
+            </p>
+          </div>
+        </footer>
 
         <AuthModal
           isOpen={showAuthModal}
