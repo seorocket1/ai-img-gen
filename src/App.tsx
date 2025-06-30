@@ -113,92 +113,141 @@ function App() {
     return true;
   };
 
-  // Simplified and more robust image extraction function
+  // Enhanced image extraction function with comprehensive debugging (same as bulk modal)
   const extractImageData = (responseData: any, responseText: string): string | null => {
-    console.log('=== EXTRACTING IMAGE DATA ===');
-    console.log('Response data type:', typeof responseData);
-    console.log('Response text length:', responseText.length);
-    console.log('Response data keys:', responseData && typeof responseData === 'object' ? Object.keys(responseData) : 'Not an object');
+    console.log('SINGLE: ========================================');
+    console.log('SINGLE: STARTING IMAGE EXTRACTION');
+    console.log('SINGLE: ========================================');
+    console.log('SINGLE: Response data type:', typeof responseData);
+    console.log('SINGLE: Response data:', responseData);
+    console.log('SINGLE: Response text length:', responseText.length);
+    console.log('SINGLE: Response text (first 500 chars):', responseText.substring(0, 500));
+    console.log('SINGLE: Response text (last 200 chars):', responseText.substring(Math.max(0, responseText.length - 200)));
 
     let imageBase64 = null;
 
-    // Method 1: Direct property access (most common case)
-    if (responseData && typeof responseData === 'object') {
-      // Check for 'image' property first (most likely from n8n)
-      if (responseData.image && typeof responseData.image === 'string') {
-        console.log('Found image in responseData.image');
-        imageBase64 = responseData.image;
-      }
-      // Check other common property names
-      else if (responseData.data && typeof responseData.data === 'string') {
-        console.log('Found image in responseData.data');
-        imageBase64 = responseData.data;
-      }
-      else if (responseData.base64 && typeof responseData.base64 === 'string') {
-        console.log('Found image in responseData.base64');
-        imageBase64 = responseData.base64;
-      }
-      // Check for nested structures
-      else if (responseData.data && responseData.data.image) {
-        console.log('Found image in responseData.data.image');
-        imageBase64 = responseData.data.image;
-      }
+    // Method 1: Direct access to 'image' property in parsed object
+    if (responseData && typeof responseData === 'object' && responseData.image) {
+      console.log('SINGLE: ✅ Method 1: Found image property in response object');
+      console.log('SINGLE: Image property type:', typeof responseData.image);
+      console.log('SINGLE: Image property length:', responseData.image.length);
+      console.log('SINGLE: Image property (first 100 chars):', responseData.image.substring(0, 100));
+      imageBase64 = responseData.image;
     }
-
-    // Method 2: If response is a string, treat it as base64
-    if (!imageBase64 && typeof responseData === 'string' && responseData.length > 100) {
-      console.log('Treating entire response as base64 string');
-      imageBase64 = responseData;
-    }
-
-    // Method 3: Parse response text for base64 patterns
-    if (!imageBase64 && responseText && responseText.length > 100) {
-      console.log('Searching response text for base64 patterns');
-      
-      // Look for data URL pattern
-      const dataUrlMatch = responseText.match(/data:image\/[^;]+;base64,([A-Za-z0-9+/=]+)/);
-      if (dataUrlMatch && dataUrlMatch[1]) {
-        console.log('Found base64 in data URL');
-        imageBase64 = dataUrlMatch[1];
-      }
-      // Look for JSON with image property
-      else {
-        const imageMatch = responseText.match(/"image"\s*:\s*"([A-Za-z0-9+/=]+)"/);
-        if (imageMatch && imageMatch[1]) {
-          console.log('Found base64 in JSON image property');
-          imageBase64 = imageMatch[1];
+    // Method 2: If responseData is a string, try to parse it as JSON
+    else if (typeof responseData === 'string') {
+      console.log('SINGLE: 🔄 Method 2: Response data is string, attempting JSON parse');
+      try {
+        const parsed = JSON.parse(responseData);
+        console.log('SINGLE: Successfully parsed string as JSON');
+        console.log('SINGLE: Parsed object keys:', Object.keys(parsed));
+        if (parsed && parsed.image) {
+          console.log('SINGLE: ✅ Found image in parsed string');
+          console.log('SINGLE: Image length:', parsed.image.length);
+          imageBase64 = parsed.image;
+        } else {
+          console.log('SINGLE: ❌ No image property in parsed object');
         }
-        // Look for standalone base64 (at least 1000 chars)
-        else {
-          const base64Match = responseText.match(/([A-Za-z0-9+/]{1000,}={0,2})/);
-          if (base64Match && base64Match[1]) {
-            console.log('Found standalone base64 pattern');
-            imageBase64 = base64Match[1];
-          }
+      } catch (parseError) {
+        console.log('SINGLE: ❌ Failed to parse string as JSON:', parseError);
+        // If it's a long string, maybe it's raw base64
+        if (responseData.length > 1000) {
+          console.log('SINGLE: 🔄 Treating long string as potential raw base64');
+          imageBase64 = responseData;
         }
       }
     }
+    // Method 3: Parse responseText directly
+    else if (responseText && responseText.includes('"image"')) {
+      console.log('SINGLE: 🔄 Method 3: Parsing response text for image property');
+      try {
+        const parsed = JSON.parse(responseText);
+        console.log('SINGLE: Successfully parsed response text as JSON');
+        console.log('SINGLE: Parsed object keys:', Object.keys(parsed));
+        if (parsed && parsed.image) {
+          console.log('SINGLE: ✅ Found image in parsed response text');
+          console.log('SINGLE: Image length:', parsed.image.length);
+          imageBase64 = parsed.image;
+        }
+      } catch (parseError) {
+        console.log('SINGLE: ❌ Failed to parse response text as JSON, trying regex');
+        // Try regex extraction as fallback
+        const match = responseText.match(/"image"\s*:\s*"([^"]+)"/);
+        if (match && match[1]) {
+          console.log('SINGLE: ✅ Found image using regex extraction');
+          console.log('SINGLE: Regex match length:', match[1].length);
+          imageBase64 = match[1];
+        } else {
+          console.log('SINGLE: ❌ Regex extraction failed');
+        }
+      }
+    }
+    // Method 4: Look for any base64-like patterns in the response
+    else {
+      console.log('SINGLE: 🔄 Method 4: Looking for base64 patterns in response');
+      // Look for long base64-like strings
+      const base64Pattern = /[A-Za-z0-9+/]{1000,}={0,2}/g;
+      const matches = responseText.match(base64Pattern);
+      if (matches && matches.length > 0) {
+        console.log('SINGLE: ✅ Found base64 pattern, using first match');
+        console.log('SINGLE: Pattern match length:', matches[0].length);
+        imageBase64 = matches[0];
+      } else {
+        console.log('SINGLE: ❌ No base64 patterns found');
+      }
+    }
 
-    // Clean the base64 string
+    // Clean and validate the base64 string
     if (imageBase64) {
+      console.log('SINGLE: 🧹 Cleaning base64 string...');
+      console.log('SINGLE: Original length:', imageBase64.length);
+      
       // Remove data URL prefix if present
       if (imageBase64.startsWith('data:image/')) {
+        console.log('SINGLE: Removing data URL prefix');
         imageBase64 = imageBase64.split(',')[1];
       }
       
-      // Remove any whitespace
-      imageBase64 = imageBase64.replace(/\s/g, '');
+      // Remove any whitespace, newlines, and other unwanted characters
+      const originalLength = imageBase64.length;
+      imageBase64 = imageBase64.replace(/[\s\n\r\t]/g, '');
+      console.log('SINGLE: Removed whitespace, length change:', originalLength, '->', imageBase64.length);
       
-      console.log('Cleaned base64 length:', imageBase64.length);
-      console.log('First 50 chars:', imageBase64.substring(0, 50));
-      console.log('Last 10 chars:', imageBase64.substring(imageBase64.length - 10));
+      console.log('SINGLE: Final cleaned length:', imageBase64.length);
+      console.log('SINGLE: First 50 chars:', imageBase64.substring(0, 50));
+      console.log('SINGLE: Last 20 chars:', imageBase64.substring(imageBase64.length - 20));
+      
+      // Validate base64 format
+      const base64Regex = /^[A-Za-z0-9+/]*={0,2}$/;
+      if (!base64Regex.test(imageBase64)) {
+        console.log('SINGLE: ❌ Invalid base64 format detected');
+        console.log('SINGLE: Invalid characters found in base64 string');
+        return null;
+      }
+      
+      // Check minimum length
+      if (imageBase64.length < 1000) {
+        console.log('SINGLE: ❌ Base64 string too short:', imageBase64.length);
+        return null;
+      }
+      
+      // Test decode a small portion
+      try {
+        atob(imageBase64.substring(0, 100));
+        console.log('SINGLE: ✅ Base64 decode test passed');
+      } catch (decodeError) {
+        console.log('SINGLE: ❌ Base64 decode test failed:', decodeError);
+        return null;
+      }
     }
 
-    console.log('Image extraction result:', {
+    console.log('SINGLE: ========================================');
+    console.log('SINGLE: EXTRACTION RESULT:', {
       found: !!imageBase64,
       length: imageBase64 ? imageBase64.length : 0,
       isValidLength: imageBase64 ? imageBase64.length > 1000 : false
     });
+    console.log('SINGLE: ========================================');
 
     return imageBase64;
   };
@@ -217,7 +266,7 @@ function App() {
     // Set timeout for the request
     const requestTimeout = setTimeout(() => {
       controller.abort();
-      console.error('Request aborted due to timeout');
+      console.error('SINGLE: Request aborted due to timeout');
     }, 120000); // 2 minutes timeout
 
     setIsProcessing(true);
@@ -225,13 +274,15 @@ function App() {
     setError(null);
     
     try {
-      console.log('=== STARTING IMAGE GENERATION ===');
-      console.log('Selected type:', selectedType);
-      console.log('Raw form data:', data);
+      console.log('SINGLE: ===========================================');
+      console.log('SINGLE: STARTING SINGLE IMAGE GENERATION');
+      console.log('SINGLE: ===========================================');
+      console.log('SINGLE: Selected type:', selectedType);
+      console.log('SINGLE: Raw form data:', data);
       
       // Sanitize the data before sending
       const sanitizedData = sanitizeFormData(data);
-      console.log('Sanitized data:', sanitizedData);
+      console.log('SINGLE: Sanitized data:', sanitizedData);
       
       // Prepare image detail with style and colour if provided
       let imageDetail = '';
@@ -255,9 +306,9 @@ function App() {
         image_detail: imageDetail,
       };
 
-      console.log('=== SENDING TO WEBHOOK ===');
-      console.log('Webhook URL:', WEBHOOK_URL);
-      console.log('Payload:', JSON.stringify(payload, null, 2));
+      console.log('SINGLE: 📤 SENDING TO WEBHOOK');
+      console.log('SINGLE: Webhook URL:', WEBHOOK_URL);
+      console.log('SINGLE: Payload:', JSON.stringify(payload, null, 2));
 
       const response = await fetch(WEBHOOK_URL, {
         method: 'POST',
@@ -272,19 +323,19 @@ function App() {
 
       clearTimeout(requestTimeout);
 
-      console.log('=== WEBHOOK RESPONSE ===');
-      console.log('Response status:', response.status);
-      console.log('Response ok:', response.ok);
-      console.log('Response status text:', response.statusText);
-      console.log('Response headers:', Object.fromEntries(response.headers.entries()));
+      console.log('SINGLE: 📥 WEBHOOK RESPONSE');
+      console.log('SINGLE: Response status:', response.status);
+      console.log('SINGLE: Response ok:', response.ok);
+      console.log('SINGLE: Response status text:', response.statusText);
+      console.log('SINGLE: Response headers:', Object.fromEntries(response.headers.entries()));
 
       if (!response.ok) {
         let errorText = '';
         try {
           errorText = await response.text();
-          console.error('Error response body:', errorText);
+          console.error('SINGLE: Error response body:', errorText);
         } catch (e) {
-          console.error('Could not read error response body');
+          console.error('SINGLE: Could not read error response body');
         }
         
         if (response.status === 404) {
@@ -300,10 +351,10 @@ function App() {
 
       // Get response as text first to debug
       const responseText = await response.text();
-      console.log('=== RAW RESPONSE ===');
-      console.log('Response text length:', responseText.length);
-      console.log('First 200 chars:', responseText.substring(0, 200));
-      console.log('Last 100 chars:', responseText.substring(Math.max(0, responseText.length - 100)));
+      console.log('SINGLE: 📄 RAW RESPONSE');
+      console.log('SINGLE: Response text length:', responseText.length);
+      console.log('SINGLE: First 200 chars:', responseText.substring(0, 200));
+      console.log('SINGLE: Last 100 chars:', responseText.substring(Math.max(0, responseText.length - 100)));
 
       if (!responseText || responseText.trim() === '') {
         throw new Error('Empty response received from image generation service. Please try again.');
@@ -312,12 +363,12 @@ function App() {
       let result;
       try {
         result = JSON.parse(responseText);
-        console.log('=== PARSED JSON ===');
-        console.log('Result type:', typeof result);
-        console.log('Result keys:', result && typeof result === 'object' ? Object.keys(result) : 'Not an object');
+        console.log('SINGLE: ✅ PARSED JSON');
+        console.log('SINGLE: Result type:', typeof result);
+        console.log('SINGLE: Result keys:', result && typeof result === 'object' ? Object.keys(result) : 'Not an object');
       } catch (parseError) {
-        console.error('JSON parse error:', parseError);
-        console.log('Response was not valid JSON. Treating as raw data...');
+        console.error('SINGLE: ❌ JSON parse error:', parseError);
+        console.log('SINGLE: Response was not valid JSON. Treating as raw data...');
         
         // If it's not JSON, treat the entire response as potential image data
         result = responseText.trim();
@@ -326,14 +377,14 @@ function App() {
       // Use enhanced image extraction function
       const imageBase64 = extractImageData(result, responseText);
 
-      console.log('=== IMAGE DATA VALIDATION ===');
-      console.log('Image base64 found:', !!imageBase64);
-      console.log('Image base64 length:', imageBase64 ? imageBase64.length : 0);
+      console.log('SINGLE: 🔍 IMAGE DATA VALIDATION');
+      console.log('SINGLE: Image base64 found:', !!imageBase64);
+      console.log('SINGLE: Image base64 length:', imageBase64 ? imageBase64.length : 0);
 
       if (!imageBase64) {
-        console.error('=== NO IMAGE DATA FOUND ===');
-        console.error('Full response structure:', JSON.stringify(result, null, 2));
-        console.error('Response text sample:', responseText.substring(0, 1000));
+        console.error('SINGLE: 💥 NO IMAGE DATA FOUND');
+        console.error('SINGLE: Full response structure:', JSON.stringify(result, null, 2));
+        console.error('SINGLE: Response text sample:', responseText.substring(0, 1000));
         throw new Error('No image data found in response. The image generation service may have failed. Please try again.');
       }
 
@@ -345,24 +396,24 @@ function App() {
       // Test if it's valid base64
       try {
         atob(imageBase64.substring(0, 100)); // Test decode a small portion
-        console.log('Base64 validation passed');
+        console.log('SINGLE: ✅ Base64 validation passed');
       } catch (base64Error) {
-        console.error('Base64 validation failed:', base64Error);
+        console.error('SINGLE: ❌ Base64 validation failed:', base64Error);
         throw new Error('Received data is not valid base64 format. Please try again.');
       }
 
-      console.log('=== PROCESSING CREDITS AND DATABASE ===');
+      console.log('SINGLE: 💳 PROCESSING CREDITS AND DATABASE');
 
       // Deduct credits for authenticated users (only if Supabase is configured)
       if (user && isAuthenticated && isSupabaseConfigured) {
         try {
-          console.log('Deducting credits for user:', user.id, 'Amount:', CREDIT_COSTS[selectedType]);
+          console.log('SINGLE: Deducting credits for user:', user.id, 'Amount:', CREDIT_COSTS[selectedType]);
           const { deductCredits } = await import('./lib/supabase');
           const newCredits = await deductCredits(user.id, CREDIT_COSTS[selectedType]);
-          console.log('Credits deducted successfully. New balance:', newCredits);
+          console.log('SINGLE: Credits deducted successfully. New balance:', newCredits);
           await refreshUser(); // Refresh user data to update credits
         } catch (creditError) {
-          console.error('Error deducting credits:', creditError);
+          console.error('SINGLE: Error deducting credits:', creditError);
           // Continue with image generation even if credit deduction fails
         }
       }
@@ -370,7 +421,7 @@ function App() {
       // Save to database for authenticated users (only if Supabase is configured)
       if (user && isAuthenticated && isSupabaseConfigured) {
         try {
-          console.log('Saving image generation to database');
+          console.log('SINGLE: Saving image generation to database');
           const { saveImageGeneration } = await import('./lib/supabase');
           await saveImageGeneration({
             user_id: user.id,
@@ -382,21 +433,21 @@ function App() {
             credits_used: CREDIT_COSTS[selectedType],
             image_data: imageBase64,
           });
-          console.log('Image generation saved to database successfully');
+          console.log('SINGLE: Image generation saved to database successfully');
         } catch (dbError) {
-          console.error('Error saving to database:', dbError);
+          console.error('SINGLE: Error saving to database:', dbError);
           // Continue with local storage even if database save fails
         }
       }
 
-      console.log('=== FINALIZING IMAGE GENERATION ===');
+      console.log('SINGLE: 🎉 FINALIZING IMAGE GENERATION');
 
       const newImage = {
         base64: imageBase64,
         type: selectedType as 'blog' | 'infographic',
       };
       
-      console.log('Setting generated image');
+      console.log('SINGLE: Setting generated image');
       setGeneratedImage(newImage);
       setCurrentStep('result');
       
@@ -412,7 +463,7 @@ function App() {
         colour: sanitizedData.colour || undefined,
       };
       
-      console.log('Adding image to history:', historyImage.id);
+      console.log('SINGLE: Adding image to history:', historyImage.id);
       
       // Add to history immediately - this will trigger real-time updates
       addToHistory(historyImage);
@@ -420,11 +471,11 @@ function App() {
       // Show success notification
       setShowSuccessNotification(true);
       
-      console.log('=== IMAGE GENERATION COMPLETED SUCCESSFULLY ===');
+      console.log('SINGLE: ✅ IMAGE GENERATION COMPLETED SUCCESSFULLY');
     } catch (error) {
-      console.error('=== IMAGE GENERATION ERROR ===');
-      console.error('Error details:', error);
-      console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace');
+      console.error('SINGLE: 💥 IMAGE GENERATION ERROR');
+      console.error('SINGLE: Error details:', error);
+      console.error('SINGLE: Error stack:', error instanceof Error ? error.stack : 'No stack trace');
       
       let errorMessage = 'Failed to generate image. Please try again.';
       
@@ -452,7 +503,7 @@ function App() {
     } finally {
       clearTimeout(requestTimeout);
       setIsProcessing(false);
-      console.log('=== PROCESSING COMPLETED ===');
+      console.log('SINGLE: 🏁 PROCESSING COMPLETED');
     }
   };
 
