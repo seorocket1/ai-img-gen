@@ -31,7 +31,7 @@
     - Enable RLS on all tables
     - Add policies for user data access
     - Add admin policies for user management
-</sql>
+*/
 
 CREATE TABLE IF NOT EXISTS users (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
