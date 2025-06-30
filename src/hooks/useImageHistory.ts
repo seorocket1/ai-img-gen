@@ -6,12 +6,9 @@ const MAX_HISTORY_ITEMS = 50;
 
 export const useImageHistory = () => {
   const [history, setHistory] = useState<HistoryImage[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   // Load history from localStorage on mount
-  useEffect(() => {
-    loadHistoryFromStorage();
-  }, []);
-
   const loadHistoryFromStorage = useCallback(() => {
     try {
       const savedHistory = localStorage.getItem(STORAGE_KEY);
@@ -38,24 +35,62 @@ export const useImageHistory = () => {
           console.log('Invalid history format, resetting');
           setHistory([]);
         }
+      } else {
+        setHistory([]);
       }
     } catch (error) {
       console.error('Error loading image history:', error);
       setHistory([]);
       // Clear corrupted data
       localStorage.removeItem(STORAGE_KEY);
+    } finally {
+      setIsLoading(false);
     }
   }, []);
+
+  // Load history on mount
+  useEffect(() => {
+    loadHistoryFromStorage();
+  }, [loadHistoryFromStorage]);
 
   // Save history to localStorage whenever it changes
   const saveHistoryToStorage = useCallback((historyData: HistoryImage[]) => {
     try {
       console.log('Saving history to localStorage:', historyData.length, 'items');
       localStorage.setItem(STORAGE_KEY, JSON.stringify(historyData));
+      
+      // Dispatch a custom event to notify other components
+      window.dispatchEvent(new CustomEvent('historyUpdated', { 
+        detail: { history: historyData } 
+      }));
     } catch (error) {
       console.error('Error saving image history:', error);
     }
   }, []);
+
+  // Listen for storage changes from other tabs/windows
+  useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === STORAGE_KEY) {
+        console.log('Storage changed externally, reloading history');
+        loadHistoryFromStorage();
+      }
+    };
+
+    const handleHistoryUpdate = (e: CustomEvent) => {
+      console.log('History updated event received');
+      // Force a re-render by updating state
+      setHistory(prev => [...e.detail.history]);
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('historyUpdated', handleHistoryUpdate as EventListener);
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('historyUpdated', handleHistoryUpdate as EventListener);
+    };
+  }, [loadHistoryFromStorage]);
 
   const addToHistory = useCallback((image: HistoryImage) => {
     console.log('Adding to history:', {
@@ -111,6 +146,11 @@ export const useImageHistory = () => {
     console.log('Clearing all history');
     setHistory([]);
     localStorage.removeItem(STORAGE_KEY);
+    
+    // Dispatch event to notify other components
+    window.dispatchEvent(new CustomEvent('historyUpdated', { 
+      detail: { history: [] } 
+    }));
   }, []);
 
   const getImageById = useCallback((id: string) => {
@@ -120,11 +160,13 @@ export const useImageHistory = () => {
   // Debug log current state
   console.log('Current history state:', {
     length: history.length,
+    isLoading,
     items: history.map(h => ({ id: h.id, type: h.type, title: h.title }))
   });
 
   return {
     history,
+    isLoading,
     addToHistory,
     removeImage,
     clearHistory,

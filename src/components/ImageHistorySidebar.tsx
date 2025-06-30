@@ -1,5 +1,5 @@
-import React, { useEffect } from 'react';
-import { X, History, Download, Trash2, Image as ImageIcon, Eye } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { X, History, Download, Trash2, Image as ImageIcon, RefreshCw } from 'lucide-react';
 import { useImageHistory } from '../hooks/useImageHistory';
 import { HistoryImage } from '../types/history';
 
@@ -12,15 +12,22 @@ export const ImageHistorySidebar: React.FC<ImageHistorySidebarProps> = ({
   isOpen,
   onClose,
 }) => {
-  const { history, clearHistory, removeImage, forceRefresh } = useImageHistory();
+  const { history, isLoading, clearHistory, removeImage, forceRefresh } = useImageHistory();
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Force refresh when sidebar opens to ensure latest data
   useEffect(() => {
     if (isOpen) {
       console.log('History sidebar opened, forcing refresh');
-      forceRefresh();
+      handleRefresh();
     }
-  }, [isOpen, forceRefresh]);
+  }, [isOpen]);
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    await forceRefresh();
+    setTimeout(() => setIsRefreshing(false), 500);
+  };
 
   const downloadImage = (image: HistoryImage) => {
     try {
@@ -87,16 +94,19 @@ export const ImageHistorySidebar: React.FC<ImageHistorySidebarProps> = ({
               </div>
               <div>
                 <h3 className="text-lg font-semibold text-gray-900">Image History</h3>
-                <p className="text-sm text-gray-600">{history.length} images generated</p>
+                <p className="text-sm text-gray-600">
+                  {isLoading ? 'Loading...' : `${history.length} images generated`}
+                </p>
               </div>
             </div>
             <div className="flex items-center space-x-2">
               <button
-                onClick={forceRefresh}
-                className="p-2 text-gray-500 hover:bg-gray-100 rounded-full transition-colors"
+                onClick={handleRefresh}
+                disabled={isRefreshing}
+                className="p-2 text-gray-500 hover:bg-gray-100 rounded-full transition-colors disabled:opacity-50"
                 title="Refresh History"
               >
-                <Eye className="w-4 h-4" />
+                <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
               </button>
               <button
                 onClick={onClose}
@@ -109,7 +119,11 @@ export const ImageHistorySidebar: React.FC<ImageHistorySidebarProps> = ({
 
           {/* History List */}
           <div className="flex-1 overflow-y-auto p-4 space-y-4">
-            {history.length === 0 ? (
+            {isLoading ? (
+              <div className="flex items-center justify-center h-64">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+              </div>
+            ) : history.length === 0 ? (
               <div className="text-center text-gray-500 py-12">
                 <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center mx-auto mb-4">
                   <ImageIcon className="w-8 h-8 text-gray-400" />
