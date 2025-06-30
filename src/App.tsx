@@ -10,6 +10,7 @@ import { DreamscapeBackground } from './components/DreamscapeBackground';
 import { AuthModal } from './components/AuthModal';
 import { ImageHistorySidebar } from './components/ImageHistorySidebar';
 import { BulkProcessingModal } from './components/BulkProcessingModal';
+import { SuccessNotification } from './components/SuccessNotification';
 import { useAuth } from './hooks/useAuth';
 import { useImageHistory } from './hooks/useImageHistory';
 import { useProcessingState } from './hooks/useProcessingState';
@@ -40,6 +41,7 @@ function App() {
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showHistorySidebar, setShowHistorySidebar] = useState(false);
   const [showBulkModal, setShowBulkModal] = useState(false);
+  const [showSuccessNotification, setShowSuccessNotification] = useState(false);
   const [currentStep, setCurrentStep] = useState<Step>('select');
   const [selectedType, setSelectedType] = useState<ImageType>(null);
   const [generatedImage, setGeneratedImage] = useState<GeneratedImage | null>(null);
@@ -134,19 +136,22 @@ function App() {
         setGeneratedImage(newImage);
         setCurrentStep('result');
         
-        // Add to history with smooth update
-        setTimeout(() => {
-          addToHistory({
-            id: `img-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-            type: selectedType as 'blog' | 'infographic',
-            base64: result.image,
-            title: selectedType === 'blog' ? sanitizedData.title : 'Infographic',
-            content: selectedType === 'blog' ? sanitizedData.intro : sanitizedData.content,
-            timestamp: new Date(),
-            style: sanitizedData.style,
-            colour: sanitizedData.colour,
-          });
-        }, 100);
+        // Add to history immediately
+        const historyImage = {
+          id: `img-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          type: selectedType as 'blog' | 'infographic',
+          base64: result.image,
+          title: selectedType === 'blog' ? sanitizedData.title : 'Infographic',
+          content: selectedType === 'blog' ? sanitizedData.intro : sanitizedData.content,
+          timestamp: Date.now(),
+          style: sanitizedData.style,
+          colour: sanitizedData.colour,
+        };
+        
+        addToHistory(historyImage);
+        
+        // Show success notification
+        setShowSuccessNotification(true);
       } else {
         throw new Error('No image data received from the server');
       }
@@ -190,6 +195,34 @@ function App() {
 
   const handleOpenBulkModal = () => {
     setShowBulkModal(true);
+  };
+
+  const downloadCurrentImage = () => {
+    if (!generatedImage) return;
+    
+    try {
+      const byteCharacters = atob(generatedImage.base64);
+      const byteNumbers = new Array(byteCharacters.length);
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      }
+      const byteArray = new Uint8Array(byteNumbers);
+      const blob = new Blob([byteArray], { type: 'image/png' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      
+      const title = formData?.title || formData?.content?.substring(0, 30) || 'image';
+      const safeTitle = title.replace(/[^a-zA-Z0-9\s-_]/g, '').replace(/\s+/g, '-').toLowerCase();
+      link.download = `seo-engine-${generatedImage.type}-${safeTitle}-${Date.now()}.png`;
+      
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Download error:', error);
+    }
   };
 
   const showSplitLayout = currentStep === 'form' || currentStep === 'result';
@@ -479,7 +512,7 @@ function App() {
         </div>
       </footer>
 
-      {/* Modals */}
+      {/* Modals and Notifications */}
       <ImageHistorySidebar
         isOpen={showHistorySidebar}
         onClose={() => setShowHistorySidebar(false)}
@@ -492,6 +525,20 @@ function App() {
         onProcessingStateChange={setIsBulkProcessing}
         onProgressUpdate={setBulkProgress}
         onImageGenerated={addToHistory}
+      />
+
+      <SuccessNotification
+        isVisible={showSuccessNotification}
+        onClose={() => setShowSuccessNotification(false)}
+        imageType={generatedImage?.type || 'blog'}
+        onDownload={downloadCurrentImage}
+        onPreview={() => {
+          // Scroll to preview section or open full preview
+          const previewElement = document.querySelector('[data-preview]');
+          if (previewElement) {
+            previewElement.scrollIntoView({ behavior: 'smooth' });
+          }
+        }}
       />
     </div>
   );

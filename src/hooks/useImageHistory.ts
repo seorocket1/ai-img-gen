@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { HistoryImage } from '../types/history';
 
 const STORAGE_KEY = 'seo_engine_image_history';
-const MAX_HISTORY_ITEMS = 20;
+const MAX_HISTORY_ITEMS = 50;
 
 export const useImageHistory = () => {
   const [history, setHistory] = useState<HistoryImage[]>([]);
@@ -13,7 +13,10 @@ export const useImageHistory = () => {
       const savedHistory = localStorage.getItem(STORAGE_KEY);
       if (savedHistory) {
         const parsed = JSON.parse(savedHistory);
-        setHistory(parsed);
+        // Ensure we have valid data structure
+        if (Array.isArray(parsed)) {
+          setHistory(parsed);
+        }
       }
     } catch (error) {
       console.error('Error loading image history:', error);
@@ -30,20 +33,18 @@ export const useImageHistory = () => {
     }
   }, [history]);
 
-  const addToHistory = (image: Omit<HistoryImage, 'id' | 'timestamp'>) => {
-    const newImage: HistoryImage = {
-      ...image,
-      id: `img_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      timestamp: Date.now(),
-    };
-
+  const addToHistory = (image: HistoryImage) => {
+    console.log('Adding to history:', image);
+    
     setHistory(prev => {
-      const updated = [newImage, ...prev];
+      const updated = [image, ...prev];
       // Keep only the most recent MAX_HISTORY_ITEMS
-      return updated.slice(0, MAX_HISTORY_ITEMS);
+      const trimmed = updated.slice(0, MAX_HISTORY_ITEMS);
+      console.log('Updated history length:', trimmed.length);
+      return trimmed;
     });
 
-    return newImage;
+    return image;
   };
 
   const removeImage = (id: string) => {
@@ -52,6 +53,7 @@ export const useImageHistory = () => {
 
   const clearHistory = () => {
     setHistory([]);
+    localStorage.removeItem(STORAGE_KEY);
   };
 
   const getImageById = (id: string) => {
