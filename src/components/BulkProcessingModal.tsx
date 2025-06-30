@@ -100,68 +100,51 @@ export const BulkProcessingModal: React.FC<BulkProcessingModalProps> = ({
     setBulkItems([]);
   };
 
-  // Enhanced image extraction function that matches the main app
+  // Simplified and more robust image extraction function specifically for n8n
   const extractImageData = (responseData: any, responseText: string): string | null => {
     console.log('BULK: === EXTRACTING IMAGE DATA ===');
     console.log('BULK: Response data type:', typeof responseData);
     console.log('BULK: Response text length:', responseText.length);
-    console.log('BULK: Response data keys:', responseData && typeof responseData === 'object' ? Object.keys(responseData) : 'Not an object');
+    console.log('BULK: Response data:', responseData);
 
     let imageBase64 = null;
 
-    // Method 1: Direct property access (most common case for n8n)
-    if (responseData && typeof responseData === 'object') {
-      // Check for 'image' property first (your n8n format)
-      if (responseData.image && typeof responseData.image === 'string') {
-        console.log('BULK: Found image in responseData.image');
-        imageBase64 = responseData.image;
-      }
-      // Check other common property names
-      else if (responseData.data && typeof responseData.data === 'string') {
-        console.log('BULK: Found image in responseData.data');
-        imageBase64 = responseData.data;
-      }
-      else if (responseData.base64 && typeof responseData.base64 === 'string') {
-        console.log('BULK: Found image in responseData.base64');
-        imageBase64 = responseData.base64;
-      }
-      // Check for nested structures
-      else if (responseData.data && responseData.data.image) {
-        console.log('BULK: Found image in responseData.data.image');
-        imageBase64 = responseData.data.image;
-      }
+    // Method 1: Check for 'image' property in parsed JSON (your n8n format)
+    if (responseData && typeof responseData === 'object' && responseData.image) {
+      console.log('BULK: Found image property in response data');
+      imageBase64 = responseData.image;
     }
-
-    // Method 2: If response is a string, treat it as base64
-    if (!imageBase64 && typeof responseData === 'string' && responseData.length > 100) {
-      console.log('BULK: Treating entire response as base64 string');
-      imageBase64 = responseData;
-    }
-
-    // Method 3: Parse response text for base64 patterns
-    if (!imageBase64 && responseText && responseText.length > 100) {
-      console.log('BULK: Searching response text for base64 patterns');
-      
-      // Look for data URL pattern
-      const dataUrlMatch = responseText.match(/data:image\/[^;]+;base64,([A-Za-z0-9+/=]+)/);
-      if (dataUrlMatch && dataUrlMatch[1]) {
-        console.log('BULK: Found base64 in data URL');
-        imageBase64 = dataUrlMatch[1];
-      }
-      // Look for JSON with image property
-      else {
-        const imageMatch = responseText.match(/"image"\s*:\s*"([A-Za-z0-9+/=]+)"/);
-        if (imageMatch && imageMatch[1]) {
-          console.log('BULK: Found base64 in JSON image property');
-          imageBase64 = imageMatch[1];
+    // Method 2: If response is a string, try to parse it as JSON first
+    else if (typeof responseData === 'string') {
+      try {
+        const parsed = JSON.parse(responseData);
+        if (parsed && parsed.image) {
+          console.log('BULK: Found image in parsed string response');
+          imageBase64 = parsed.image;
         }
-        // Look for standalone base64 (at least 1000 chars)
-        else {
-          const base64Match = responseText.match(/([A-Za-z0-9+/]{1000,}={0,2})/);
-          if (base64Match && base64Match[1]) {
-            console.log('BULK: Found standalone base64 pattern');
-            imageBase64 = base64Match[1];
-          }
+      } catch (e) {
+        // If not JSON, treat as raw base64
+        if (responseData.length > 1000) {
+          console.log('BULK: Treating string response as raw base64');
+          imageBase64 = responseData;
+        }
+      }
+    }
+    // Method 3: Parse response text directly for JSON pattern
+    else if (responseText && responseText.includes('"image"')) {
+      console.log('BULK: Searching response text for image property');
+      try {
+        const parsed = JSON.parse(responseText);
+        if (parsed && parsed.image) {
+          console.log('BULK: Found image in parsed response text');
+          imageBase64 = parsed.image;
+        }
+      } catch (e) {
+        // Try regex extraction
+        const match = responseText.match(/"image"\s*:\s*"([^"]+)"/);
+        if (match && match[1]) {
+          console.log('BULK: Found image using regex');
+          imageBase64 = match[1];
         }
       }
     }
@@ -173,12 +156,18 @@ export const BulkProcessingModal: React.FC<BulkProcessingModalProps> = ({
         imageBase64 = imageBase64.split(',')[1];
       }
       
-      // Remove any whitespace
-      imageBase64 = imageBase64.replace(/\s/g, '');
+      // Remove any whitespace and newlines
+      imageBase64 = imageBase64.replace(/\s/g, '').replace(/\n/g, '').replace(/\r/g, '');
       
       console.log('BULK: Cleaned base64 length:', imageBase64.length);
       console.log('BULK: First 50 chars:', imageBase64.substring(0, 50));
       console.log('BULK: Last 10 chars:', imageBase64.substring(imageBase64.length - 10));
+      
+      // Validate it looks like base64
+      if (!/^[A-Za-z0-9+/]*={0,2}$/.test(imageBase64)) {
+        console.error('BULK: Invalid base64 format detected');
+        return null;
+      }
     }
 
     console.log('BULK: Image extraction result:', {
@@ -231,7 +220,7 @@ export const BulkProcessingModal: React.FC<BulkProcessingModalProps> = ({
         image_detail: imageDetail,
       };
 
-      console.log('BULK: Sending payload:', payload);
+      console.log('BULK: Sending payload:', JSON.stringify(payload, null, 2));
 
       // Create abort controller for timeout
       const controller = new AbortController();
@@ -254,11 +243,14 @@ export const BulkProcessingModal: React.FC<BulkProcessingModalProps> = ({
       clearTimeout(requestTimeout);
 
       console.log('BULK: Response status:', response.status);
+      console.log('BULK: Response ok:', response.ok);
+      console.log('BULK: Response headers:', Object.fromEntries(response.headers.entries()));
 
       if (!response.ok) {
         let errorText = '';
         try {
           errorText = await response.text();
+          console.error('BULK: Error response body:', errorText);
         } catch (e) {
           console.error('BULK: Could not read error response');
         }
@@ -266,7 +258,9 @@ export const BulkProcessingModal: React.FC<BulkProcessingModalProps> = ({
       }
 
       const responseText = await response.text();
-      console.log('BULK: Response text length:', responseText.length);
+      console.log('BULK: Raw response text length:', responseText.length);
+      console.log('BULK: First 200 chars of response:', responseText.substring(0, 200));
+      console.log('BULK: Last 100 chars of response:', responseText.substring(Math.max(0, responseText.length - 100)));
 
       if (!responseText || responseText.trim() === '') {
         throw new Error('Empty response received from server');
@@ -275,9 +269,11 @@ export const BulkProcessingModal: React.FC<BulkProcessingModalProps> = ({
       let result;
       try {
         result = JSON.parse(responseText);
-        console.log('BULK: Parsed JSON result:', result);
+        console.log('BULK: Successfully parsed JSON response');
+        console.log('BULK: Response keys:', Object.keys(result));
       } catch (parseError) {
         console.log('BULK: Response was not valid JSON, treating as raw data');
+        console.log('BULK: Parse error:', parseError);
         result = responseText.trim();
       }
 
@@ -285,13 +281,15 @@ export const BulkProcessingModal: React.FC<BulkProcessingModalProps> = ({
       const imageBase64 = extractImageData(result, responseText);
 
       if (!imageBase64) {
-        console.error('BULK: No image data found in response');
-        console.error('BULK: Full response:', result);
-        throw new Error('No image data found in response');
+        console.error('BULK: === NO IMAGE DATA FOUND ===');
+        console.error('BULK: Full response structure:', JSON.stringify(result, null, 2));
+        console.error('BULK: Response text sample:', responseText.substring(0, 1000));
+        throw new Error('No image data found in response. The image generation service may have failed.');
       }
 
       // Validate base64 length
       if (imageBase64.length < 1000) {
+        console.error('BULK: Base64 too short:', imageBase64.length);
         throw new Error('Received image data is too short to be valid');
       }
 
@@ -329,11 +327,18 @@ export const BulkProcessingModal: React.FC<BulkProcessingModalProps> = ({
 
     } catch (error) {
       console.error(`BULK: Error processing item ${index + 1}:`, error);
+      console.error('BULK: Error stack:', error instanceof Error ? error.stack : 'No stack trace');
       
       let errorMessage = 'Failed to generate image';
       if (error instanceof Error) {
         if (error.name === 'AbortError') {
           errorMessage = 'Request timed out';
+        } else if (error.message.includes('JSON')) {
+          errorMessage = 'Invalid response format from server';
+        } else if (error.message.includes('Empty response')) {
+          errorMessage = 'No response received from server';
+        } else if (error.message.includes('base64')) {
+          errorMessage = 'Invalid image data received';
         } else {
           errorMessage = error.message;
         }
