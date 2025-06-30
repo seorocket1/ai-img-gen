@@ -55,96 +55,6 @@ export const BulkProcessingModal: React.FC<BulkProcessingModalProps> = ({
   const [currentProcessingIndex, setCurrentProcessingIndex] = useState(-1);
   const [completedCount, setCompletedCount] = useState(0);
 
-  // Enhanced image extraction function (same as in App.tsx)
-  const extractImageData = (responseData: any, responseText: string): string | null => {
-    console.log('=== BULK: EXTRACTING IMAGE DATA ===');
-    console.log('Response data type:', typeof responseData);
-    console.log('Response text length:', responseText.length);
-    console.log('Response data keys:', responseData && typeof responseData === 'object' ? Object.keys(responseData) : 'Not an object');
-
-    let imageBase64 = null;
-
-    // Method 1: Direct property access (most common case)
-    if (responseData && typeof responseData === 'object') {
-      // Check for 'image' property first (most likely from n8n)
-      if (responseData.image && typeof responseData.image === 'string') {
-        console.log('BULK: Found image in responseData.image');
-        imageBase64 = responseData.image;
-      }
-      // Check other common property names
-      else if (responseData.data && typeof responseData.data === 'string') {
-        console.log('BULK: Found image in responseData.data');
-        imageBase64 = responseData.data;
-      }
-      else if (responseData.base64 && typeof responseData.base64 === 'string') {
-        console.log('BULK: Found image in responseData.base64');
-        imageBase64 = responseData.base64;
-      }
-      // Check for nested structures
-      else if (responseData.data && responseData.data.image) {
-        console.log('BULK: Found image in responseData.data.image');
-        imageBase64 = responseData.data.image;
-      }
-    }
-
-    // Method 2: If response is a string, treat it as base64
-    if (!imageBase64 && typeof responseData === 'string' && responseData.length > 100) {
-      console.log('BULK: Treating entire response as base64 string');
-      imageBase64 = responseData;
-    }
-
-    // Method 3: Parse response text for base64 patterns
-    if (!imageBase64 && responseText && responseText.length > 100) {
-      console.log('BULK: Searching response text for base64 patterns');
-      
-      // Look for data URL pattern
-      const dataUrlMatch = responseText.match(/data:image\/[^;]+;base64,([A-Za-z0-9+/=]+)/);
-      if (dataUrlMatch && dataUrlMatch[1]) {
-        console.log('BULK: Found base64 in data URL');
-        imageBase64 = dataUrlMatch[1];
-      }
-      // Look for JSON with image property
-      else {
-        const imageMatch = responseText.match(/"image"\s*:\s*"([A-Za-z0-9+/=]+)"/);
-        if (imageMatch && imageMatch[1]) {
-          console.log('BULK: Found base64 in JSON image property');
-          imageBase64 = imageMatch[1];
-        }
-        // Look for standalone base64 (at least 1000 chars)
-        else {
-          const base64Match = responseText.match(/([A-Za-z0-9+/]{1000,}={0,2})/);
-          if (base64Match && base64Match[1]) {
-            console.log('BULK: Found standalone base64 pattern');
-            imageBase64 = base64Match[1];
-          }
-        }
-      }
-    }
-
-    // Clean the base64 string
-    if (imageBase64) {
-      // Remove data URL prefix if present
-      if (imageBase64.startsWith('data:image/')) {
-        imageBase64 = imageBase64.split(',')[1];
-      }
-      
-      // Remove any whitespace
-      imageBase64 = imageBase64.replace(/\s/g, '');
-      
-      console.log('BULK: Cleaned base64 length:', imageBase64.length);
-      console.log('BULK: First 50 chars:', imageBase64.substring(0, 50));
-      console.log('BULK: Last 10 chars:', imageBase64.substring(imageBase64.length - 10));
-    }
-
-    console.log('BULK: Image extraction result:', {
-      found: !!imageBase64,
-      length: imageBase64 ? imageBase64.length : 0,
-      isValidLength: imageBase64 ? imageBase64.length > 1000 : false
-    });
-
-    return imageBase64;
-  };
-
   useEffect(() => {
     if (isOpen) {
       // Reset state when modal opens
@@ -305,18 +215,48 @@ export const BulkProcessingModal: React.FC<BulkProcessingModalProps> = ({
       let result;
       try {
         result = JSON.parse(responseText);
+        console.log('BULK: Parsed JSON result:', result);
       } catch (parseError) {
         console.log('BULK: Response was not valid JSON, treating as raw data');
         result = responseText.trim();
       }
 
-      // Use enhanced image extraction function
-      const imageBase64 = extractImageData(result, responseText);
+      // Extract image data using the same logic as main app
+      let imageBase64 = null;
+
+      // Method 1: Check for 'image' property in JSON response (your n8n format)
+      if (result && typeof result === 'object' && result.image) {
+        console.log('BULK: Found image in result.image');
+        imageBase64 = result.image;
+      }
+      // Method 2: Check other common property names
+      else if (result && typeof result === 'object') {
+        const possibleKeys = ['data', 'base64', 'imageData', 'image_data'];
+        for (const key of possibleKeys) {
+          if (result[key] && typeof result[key] === 'string') {
+            console.log(`BULK: Found image in result.${key}`);
+            imageBase64 = result[key];
+            break;
+          }
+        }
+      }
+      // Method 3: If response is a string, treat it as base64
+      else if (typeof result === 'string' && result.length > 100) {
+        console.log('BULK: Treating entire response as base64 string');
+        imageBase64 = result;
+      }
 
       if (!imageBase64) {
-        console.error('BULK: No image data found');
+        console.error('BULK: No image data found in response');
+        console.error('BULK: Full response:', result);
         throw new Error('No image data found in response');
       }
+
+      // Clean the base64 string
+      if (imageBase64.startsWith('data:image/')) {
+        imageBase64 = imageBase64.split(',')[1];
+      }
+      imageBase64 = imageBase64.replace(/\s/g, '');
 
       // Validate base64 length
       if (imageBase64.length < 1000) {
