@@ -22,9 +22,9 @@ export const SignUpModal: React.FC<SignUpModalProps> = ({
   const [formData, setFormData] = useState({
     email: '',
     name: '',
+    username: '',
     brand_name: '',
     website_url: '',
-    username: '',
     password: '',
     confirmPassword: '',
   });
@@ -63,9 +63,9 @@ export const SignUpModal: React.FC<SignUpModalProps> = ({
       const success = await onSignUp({
         email: formData.email,
         name: formData.name,
+        username: formData.username,
         brand_name: formData.brand_name || undefined,
         website_url: formData.website_url || undefined,
-        username: formData.username,
         password: formData.password,
       });
 
@@ -74,9 +74,9 @@ export const SignUpModal: React.FC<SignUpModalProps> = ({
         setFormData({
           email: '',
           name: '',
+          username: '',
           brand_name: '',
           website_url: '',
-          username: '',
           password: '',
           confirmPassword: '',
         });
@@ -159,42 +159,6 @@ export const SignUpModal: React.FC<SignUpModalProps> = ({
               </div>
             </div>
 
-            {/* Brand Name */}
-            <div>
-              <label htmlFor="brand_name" className="block text-sm font-semibold text-gray-900 mb-2">
-                Brand Name
-              </label>
-              <div className="relative">
-                <Building className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-                <input
-                  type="text"
-                  id="brand_name"
-                  value={formData.brand_name}
-                  onChange={(e) => handleInputChange('brand_name', e.target.value)}
-                  className="w-full pl-12 pr-4 py-3 rounded-xl bg-gray-50 border border-gray-200 text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300"
-                  placeholder="Enter your brand name"
-                />
-              </div>
-            </div>
-
-            {/* Website URL */}
-            <div>
-              <label htmlFor="website_url" className="block text-sm font-semibold text-gray-900 mb-2">
-                Website URL <span className="text-gray-500 font-normal">(Optional but recommended)</span>
-              </label>
-              <div className="relative">
-                <Globe className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-                <input
-                  type="url"
-                  id="website_url"
-                  value={formData.website_url}
-                  onChange={(e) => handleInputChange('website_url', e.target.value)}
-                  className="w-full pl-12 pr-4 py-3 rounded-xl bg-gray-50 border border-gray-200 text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300"
-                  placeholder="https://yourwebsite.com"
-                />
-              </div>
-            </div>
-
             {/* Username */}
             <div>
               <label htmlFor="username" className="block text-sm font-semibold text-gray-900 mb-2">
@@ -212,13 +176,42 @@ export const SignUpModal: React.FC<SignUpModalProps> = ({
                   required
                 />
               </div>
-              <div className="mt-2 space-y-1">
-                <p className="text-xs text-gray-500">Only lowercase letters, numbers, and underscores allowed</p>
-                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
-                  <p className="text-xs text-amber-700 font-medium">
-                    ⚠️ Important: Your username must be unique across all users. If someone else has already chosen this username, account creation will fail.
-                  </p>
-                </div>
+              <p className="text-xs text-gray-500 mt-1">Only lowercase letters, numbers, and underscores allowed</p>
+            </div>
+
+            {/* Brand Name */}
+            <div>
+              <label htmlFor="brand_name" className="block text-sm font-semibold text-gray-900 mb-2">
+                Brand Name <span className="text-gray-500 font-normal">(Optional)</span>
+              </label>
+              <div className="relative">
+                <Building className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                <input
+                  type="text"
+                  id="brand_name"
+                  value={formData.brand_name}
+                  onChange={(e) => handleInputChange('brand_name', e.target.value)}
+                  className="w-full pl-12 pr-4 py-3 rounded-xl bg-gray-50 border border-gray-200 text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300"
+                  placeholder="Enter your brand name"
+                />
+              </div>
+            </div>
+
+            {/* Website URL */}
+            <div>
+              <label htmlFor="website_url" className="block text-sm font-semibold text-gray-900 mb-2">
+                Website URL <span className="text-gray-500 font-normal">(Optional)</span>
+              </label>
+              <div className="relative">
+                <Globe className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                <input
+                  type="url"
+                  id="website_url"
+                  value={formData.website_url}
+                  onChange={(e) => handleInputChange('website_url', e.target.value)}
+                  className="w-full pl-12 pr-4 py-3 rounded-xl bg-gray-50 border border-gray-200 text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300"
+                  placeholder="https://yourwebsite.com"
+                />
               </div>
             </div>
 

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { User as DBUser } from '../lib/supabase';
+import { User as DBUser, isSupabaseConfigured } from '../lib/supabase';
 
 interface AuthState {
   user: DBUser | null;
@@ -16,43 +16,43 @@ export const useSupabaseAuth = () => {
   });
 
   useEffect(() => {
-    // Check if Supabase environment variables are configured
-    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-    const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-
-    console.log('Checking Supabase configuration:', {
-      hasUrl: !!supabaseUrl,
-      hasKey: !!supabaseAnonKey,
-      url: supabaseUrl ? 'configured' : 'missing',
-      key: supabaseAnonKey ? 'configured' : 'missing'
-    });
-
-    if (!supabaseUrl || !supabaseAnonKey) {
+    console.log('Initializing Supabase auth hook...');
+    
+    // Check if Supabase is configured
+    if (!isSupabaseConfigured) {
       console.warn('Supabase environment variables are not configured');
       setAuthState({
         user: null,
         isLoading: false,
         isAuthenticated: false,
-        error: 'Database connection not configured. Please set up Supabase environment variables.',
+        error: 'Database connection not configured. Please click "Connect to Supabase" in the top right corner.',
       });
       return;
     }
 
-    // If Supabase is configured, try to initialize
+    // Initialize auth if Supabase is configured
     const initializeAuth = async () => {
       try {
+        console.log('Supabase is configured, initializing auth...');
+        
         // Dynamic import to avoid loading Supabase if not configured
         const { getCurrentUser, supabase } = await import('../lib/supabase');
+        
+        if (!supabase) {
+          throw new Error('Supabase client not available');
+        }
         
         // Check for existing session
         const result = await getCurrentUser();
         if (result) {
+          console.log('Found existing user session:', result.user.email);
           setAuthState({
             user: result.user,
             isLoading: false,
             isAuthenticated: true,
           });
         } else {
+          console.log('No existing user session found');
           setAuthState({
             user: null,
             isLoading: false,
@@ -62,6 +62,8 @@ export const useSupabaseAuth = () => {
 
         // Listen for auth changes
         const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+          console.log('Auth state change:', event, session?.user?.email || 'no user');
+          
           try {
             if (event === 'SIGNED_IN' && session) {
               const result = await getCurrentUser();
@@ -89,8 +91,11 @@ export const useSupabaseAuth = () => {
           }
         });
 
-        // Cleanup function
-        return () => subscription.unsubscribe();
+        // Return cleanup function
+        return () => {
+          console.log('Cleaning up auth subscription');
+          subscription.unsubscribe();
+        };
       } catch (error) {
         console.error('Auth initialization error:', error);
         setAuthState({
@@ -99,15 +104,16 @@ export const useSupabaseAuth = () => {
           isAuthenticated: false,
           error: 'Failed to initialize authentication. Please check your database connection.',
         });
+        return () => {}; // Return empty cleanup function
       }
     };
 
-    const cleanup = initializeAuth();
+    const cleanupPromise = initializeAuth();
     
     return () => {
-      if (cleanup instanceof Promise) {
-        cleanup.then(fn => fn && fn());
-      }
+      cleanupPromise.then(cleanup => {
+        if (cleanup) cleanup();
+      });
     };
   }, []);
 
@@ -116,12 +122,19 @@ export const useSupabaseAuth = () => {
     name: string;
     brand_name?: string;
     website_url?: string;
-    user_id: string;
+    username: string;
     password: string;
   }): Promise<boolean> => {
+    if (!isSupabaseConfigured) {
+      throw new Error('Database connection not configured');
+    }
+
     try {
+      console.log('Attempting sign up for:', userData.email);
       const { signUp } = await import('../lib/supabase');
       const result = await signUp(userData);
+      console.log('Sign up successful:', result.user.email);
+      
       setAuthState({
         user: result.user,
         isLoading: false,
@@ -130,18 +143,26 @@ export const useSupabaseAuth = () => {
       return true;
     } catch (error) {
       console.error('Sign up error:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to create account';
       setAuthState(prev => ({
         ...prev,
-        error: error instanceof Error ? error.message : 'Failed to create account',
+        error: errorMessage,
       }));
       throw error;
     }
   };
 
   const handleSignIn = async (email: string, password: string): Promise<boolean> => {
+    if (!isSupabaseConfigured) {
+      throw new Error('Database connection not configured');
+    }
+
     try {
+      console.log('Attempting sign in for:', email);
       const { signIn } = await import('../lib/supabase');
       const result = await signIn(email, password);
+      console.log('Sign in successful:', result.user.email);
+      
       setAuthState({
         user: result.user,
         isLoading: false,
@@ -150,16 +171,28 @@ export const useSupabaseAuth = () => {
       return true;
     } catch (error) {
       console.error('Sign in error:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to sign in';
       setAuthState(prev => ({
         ...prev,
-        error: error instanceof Error ? error.message : 'Failed to sign in',
+        error: errorMessage,
       }));
       return false;
     }
   };
 
   const handleSignOut = async () => {
+    if (!isSupabaseConfigured) {
+      // Even if not configured, clear local state
+      setAuthState({
+        user: null,
+        isLoading: false,
+        isAuthenticated: false,
+      });
+      return;
+    }
+
     try {
+      console.log('Signing out...');
       const { signOut } = await import('../lib/supabase');
       await signOut();
       setAuthState({
@@ -179,6 +212,10 @@ export const useSupabaseAuth = () => {
   };
 
   const refreshUser = async () => {
+    if (!isSupabaseConfigured) {
+      return;
+    }
+
     try {
       const { getCurrentUser } = await import('../lib/supabase');
       const result = await getCurrentUser();

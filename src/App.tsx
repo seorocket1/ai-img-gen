@@ -17,6 +17,7 @@ import { useSupabaseAuth } from './hooks/useSupabaseAuth';
 import { useImageHistory } from './hooks/useImageHistory';
 import { useProcessingState } from './hooks/useProcessingState';
 import { sanitizeFormData } from './utils/textSanitizer';
+import { isSupabaseConfigured } from './lib/supabase';
 
 type Step = 'select' | 'form' | 'result';
 type ImageType = 'blog' | 'infographic' | null;
@@ -102,7 +103,7 @@ function App() {
   };
 
   const checkCredits = (imageType: 'blog' | 'infographic'): boolean => {
-    if (!user || user.isAnonymous) return true; // Anonymous users can still use the service
+    if (!user || !isAuthenticated || !isSupabaseConfigured) return true; // Allow usage for non-authenticated users or when DB not configured
     
     const requiredCredits = CREDIT_COSTS[imageType];
     if (user.credits < requiredCredits) {
@@ -169,7 +170,7 @@ function App() {
 
       if (result.image) {
         // Deduct credits for authenticated users (only if Supabase is configured)
-        if (user && !user.isAnonymous) {
+        if (user && isAuthenticated && isSupabaseConfigured) {
           try {
             const { deductCredits } = await import('./lib/supabase');
             await deductCredits(user.id, CREDIT_COSTS[selectedType]);
@@ -181,7 +182,7 @@ function App() {
         }
 
         // Save to database for authenticated users (only if Supabase is configured)
-        if (user && !user.isAnonymous) {
+        if (user && isAuthenticated && isSupabaseConfigured) {
           try {
             const { saveImageGeneration } = await import('./lib/supabase');
             await saveImageGeneration({
@@ -288,7 +289,7 @@ function App() {
     });
     
     // Refresh user data to update credits
-    if (user && !user.isAnonymous) {
+    if (user && isAuthenticated && isSupabaseConfigured) {
       refreshUser();
     }
     
@@ -432,7 +433,7 @@ function App() {
               <div className="hidden sm:block w-2 h-2 bg-white/30 rounded-full"></div>
               <div className="flex items-center px-4 py-2 bg-white/10 backdrop-blur-sm rounded-full border border-white/20 text-white">
                 <CreditCard className="w-5 h-5 mr-2 text-green-400" />
-                100 Free Credits
+                {isSupabaseConfigured ? '100 Free Credits' : 'Free to Use'}
               </div>
             </div>
             
@@ -489,7 +490,7 @@ function App() {
               </div>
               <div className="flex items-center space-x-3">
                 {/* Credits Display */}
-                {user && !user.isAnonymous && (
+                {user && isSupabaseConfigured && (
                   <div className="flex items-center px-3 py-2 bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-lg">
                     <CreditCard className="w-4 h-4 mr-2 text-green-600" />
                     <span className="text-sm font-semibold text-green-700">{user.credits} Credits</span>
@@ -511,7 +512,7 @@ function App() {
                 </button>
                 
                 {/* Admin Panel Button */}
-                {user && user.is_admin && (
+                {user && user.is_admin && isSupabaseConfigured && (
                   <button
                     onClick={() => setShowAdminPanel(true)}
                     disabled={isProcessing || isBulkProcessing}
@@ -524,7 +525,7 @@ function App() {
                 
                 <div className="flex items-center text-sm text-gray-600">
                   <User className="w-4 h-4 mr-2" />
-                  {user?.isAnonymous ? 'Anonymous' : user?.name || user?.email || 'User'}
+                  {user?.name || user?.email || 'User'}
                 </div>
                 <button
                   onClick={signOut}
@@ -615,8 +616,8 @@ function App() {
                   </div>
                   <p className="text-gray-600 mt-2 text-sm sm:text-base">
                     {selectedType === 'blog' 
-                      ? `Provide your blog details to generate a stunning featured image (${CREDIT_COSTS.blog} credits)`
-                      : `Provide your content to create a visual infographic (${CREDIT_COSTS.infographic} credits)`
+                      ? `Provide your blog details to generate a stunning featured image${isSupabaseConfigured ? ` (${CREDIT_COSTS.blog} credits)` : ''}`
+                      : `Provide your content to create a visual infographic${isSupabaseConfigured ? ` (${CREDIT_COSTS.infographic} credits)` : ''}`
                     }
                   </p>
                 </div>
@@ -700,7 +701,7 @@ function App() {
         onRefreshUser={refreshUser}
       />
 
-      {user && user.is_admin && (
+      {user && user.is_admin && isSupabaseConfigured && (
         <AdminPanel
           isOpen={showAdminPanel}
           onClose={() => setShowAdminPanel(false)}
