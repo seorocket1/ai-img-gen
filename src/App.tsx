@@ -585,7 +585,7 @@ function App() {
   // Show authentication screen if not authenticated
   if (!isAuthenticated) {
     return (
-      <div className="h-screen bg-gradient-to-br from-slate-900 via-gray-900 to-slate-800 relative overflow-hidden flex flex-col">
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-gray-900 to-slate-800 relative overflow-hidden flex flex-col">
         {/* Animated Background Elements */}
         <div className="absolute inset-0 overflow-hidden">
           {/* Floating Orbs */}
@@ -635,9 +635,9 @@ function App() {
           </div>
         </header>
 
-        {/* Hero Section - Perfectly Centered */}
-        <main className="flex-1 flex items-center justify-center relative z-10 px-4 sm:px-6">
-          <div className="text-center max-w-5xl mx-auto">
+        {/* Hero Section - Properly Centered with Scroll */}
+        <main className="flex-1 flex items-center justify-center relative z-10 px-4 sm:px-6 py-8 overflow-y-auto">
+          <div className="text-center max-w-5xl mx-auto w-full">
             {/* Main Icon with Animated Elements */}
             <div className="relative flex items-center justify-center w-32 h-32 mx-auto mb-8">
               {/* Main Icon */}
@@ -661,7 +661,7 @@ function App() {
             </div>
             
             {/* Main Heading with Better Colors */}
-            <h1 className="text-5xl sm:text-7xl font-bold mb-6 leading-tight">
+            <h1 className="text-4xl sm:text-6xl lg:text-7xl font-bold mb-6 leading-tight">
               <span className="bg-gradient-to-r from-emerald-400 via-teal-400 to-cyan-400 bg-clip-text text-transparent">
                 AI Image
               </span>
@@ -672,14 +672,14 @@ function App() {
             </h1>
             
             {/* Subtitle */}
-            <p className="text-xl sm:text-2xl text-slate-300 mb-8 max-w-4xl mx-auto leading-relaxed">
+            <p className="text-lg sm:text-xl lg:text-2xl text-slate-300 mb-8 max-w-4xl mx-auto leading-relaxed">
               Create stunning blog featured images and infographics with the power of AI
             </p>
             
             {/* Feature Pills */}
-            <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-12">
+            <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center items-center mb-8">
               <div className="flex items-center px-4 py-2 bg-slate-800/50 backdrop-blur-sm rounded-full border border-slate-600/50 text-slate-200">
-                <Zap className="w-5 h-5 mr-2 text-emerald-400" />
+                <Zap className="w-4 h-4 mr-2 text-emerald-400" />
                 Powered by{' '}
                 <a 
                   href="https://seoengine.agency/" 
@@ -692,36 +692,36 @@ function App() {
               </div>
               <div className="hidden sm:block w-2 h-2 bg-slate-500 rounded-full"></div>
               <div className="flex items-center px-4 py-2 bg-slate-800/50 backdrop-blur-sm rounded-full border border-slate-600/50 text-slate-200">
-                <Brain className="w-5 h-5 mr-2 text-violet-400" />
+                <Brain className="w-4 h-4 mr-2 text-violet-400" />
                 Neural Networks
               </div>
               <div className="hidden sm:block w-2 h-2 bg-slate-500 rounded-full"></div>
               <div className="flex items-center px-4 py-2 bg-slate-800/50 backdrop-blur-sm rounded-full border border-slate-600/50 text-slate-200">
-                <CreditCard className="w-5 h-5 mr-2 text-amber-400" />
+                <CreditCard className="w-4 h-4 mr-2 text-amber-400" />
                 {isSupabaseConfigured ? '100 Free Credits' : 'Free to Use'}
               </div>
             </div>
             
             {/* Stats Section */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-12 max-w-2xl mx-auto">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6 mb-8 max-w-2xl mx-auto">
               <div className="text-center">
-                <div className="text-3xl font-bold text-emerald-400 mb-1">10K+</div>
-                <div className="text-sm text-slate-400">Images Generated</div>
+                <div className="text-2xl sm:text-3xl font-bold text-emerald-400 mb-1">10K+</div>
+                <div className="text-xs sm:text-sm text-slate-400">Images Generated</div>
               </div>
               <div className="text-center">
-                <div className="text-3xl font-bold text-amber-400 mb-1">99.9%</div>
-                <div className="text-sm text-slate-400">Uptime</div>
+                <div className="text-2xl sm:text-3xl font-bold text-amber-400 mb-1">99.9%</div>
+                <div className="text-xs sm:text-sm text-slate-400">Uptime</div>
               </div>
               <div className="text-center">
-                <div className="text-3xl font-bold text-violet-400 mb-1">30s</div>
-                <div className="text-sm text-slate-400">Avg Generation</div>
+                <div className="text-2xl sm:text-3xl font-bold text-violet-400 mb-1">30s</div>
+                <div className="text-xs sm:text-sm text-slate-400">Avg Generation</div>
               </div>
             </div>
             
             {/* CTA Button */}
             <button
               onClick={() => setShowAuthModal(true)}
-              className="px-10 py-4 rounded-xl bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 text-white font-bold hover:from-emerald-600 hover:via-teal-600 hover:to-cyan-600 transition-all duration-300 transform hover:scale-105 shadow-2xl text-lg border border-emerald-400/20"
+              className="px-8 sm:px-10 py-3 sm:py-4 rounded-xl bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 text-white font-bold hover:from-emerald-600 hover:via-teal-600 hover:to-cyan-600 transition-all duration-300 transform hover:scale-105 shadow-2xl text-base sm:text-lg border border-emerald-400/20"
             >
               Start Creating Free
             </button>
