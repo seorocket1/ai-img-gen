@@ -561,6 +561,14 @@ export const BulkProcessingModal: React.FC<BulkProcessingModalProps> = ({
     }
   };
 
+  const handleClose = () => {
+    if (isProcessing) {
+      const confirmClose = confirm('Bulk processing is currently active. Are you sure you want to close? This will not stop the processing but you won\'t be able to monitor progress.');
+      if (!confirmClose) return;
+    }
+    onClose();
+  };
+
   if (!isOpen) return null;
 
   const completedCount = bulkItems.filter(item => item.status === 'completed').length;
@@ -572,9 +580,9 @@ export const BulkProcessingModal: React.FC<BulkProcessingModalProps> = ({
         {/* Header */}
         <div className="bg-gradient-to-r from-blue-500 to-blue-600 p-6 text-white relative flex-shrink-0">
           <button
-            onClick={onClose}
-            disabled={isProcessing}
-            className="absolute top-4 right-4 p-2 hover:bg-white/20 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            onClick={handleClose}
+            className="absolute top-4 right-4 p-2 hover:bg-white/20 rounded-full transition-colors"
+            title={isProcessing ? "Processing is active - click to close anyway" : "Close"}
           >
             <X className="w-5 h-5" />
           </button>
