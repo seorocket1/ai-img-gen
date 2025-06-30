@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Mail, UserCheck, Sparkles, Eye, EyeOff, UserPlus } from 'lucide-react';
+import { X, Mail, Sparkles, Eye, EyeOff, UserPlus } from 'lucide-react';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -36,19 +36,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       setPassword('');
     } else {
       setError(result.error || 'Failed to sign in. Please try again.');
-    }
-    setIsLoading(false);
-  };
-
-  const handleAnonymousSignIn = async () => {
-    setIsLoading(true);
-    setError('');
-
-    const success = await onSignInAnonymously();
-    if (success) {
-      onClose();
-    } else {
-      setError('Failed to sign in anonymously. Please try again.');
     }
     setIsLoading(false);
   };
@@ -168,25 +155,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               <UserPlus className="w-5 h-5 mr-2" />
               Create New Account (100 Free Credits!)
             </div>
-          </button>
-
-          {/* Anonymous Sign In */}
-          <button
-            onClick={handleAnonymousSignIn}
-            disabled={isLoading}
-            className="w-full py-3 px-6 rounded-xl bg-gradient-to-r from-gray-600 to-gray-700 text-white font-semibold hover:from-gray-700 hover:to-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 transform hover:scale-[1.02] disabled:hover:scale-100"
-          >
-            {isLoading ? (
-              <div className="flex items-center justify-center">
-                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-3"></div>
-                Signing In...
-              </div>
-            ) : (
-              <div className="flex items-center justify-center">
-                <UserCheck className="w-5 h-5 mr-2" />
-                Continue Anonymously (Limited Features)
-              </div>
-            )}
           </button>
 
           <p className="text-xs text-gray-500 text-center">
