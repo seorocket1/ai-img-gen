@@ -113,108 +113,91 @@ function App() {
     return true;
   };
 
-  // Enhanced function to extract base64 image data from various response formats
+  // Simplified and more robust image extraction function
   const extractImageData = (responseData: any, responseText: string): string | null => {
     console.log('=== EXTRACTING IMAGE DATA ===');
     console.log('Response data type:', typeof responseData);
-    console.log('Response data:', responseData);
     console.log('Response text length:', responseText.length);
+    console.log('Response data keys:', responseData && typeof responseData === 'object' ? Object.keys(responseData) : 'Not an object');
 
     let imageBase64 = null;
 
-    // Method 1: Check if responseData is an object with image properties
+    // Method 1: Direct property access (most common case)
     if (responseData && typeof responseData === 'object') {
-      console.log('Checking object properties for image data...');
-      
-      // Common property names for image data
-      const imageProperties = [
-        'image', 'data', 'base64', 'imageData', 'image_data', 'output', 
-        'result', 'response', 'file', 'content', 'body', 'payload'
-      ];
-      
-      for (const prop of imageProperties) {
-        if (responseData[prop]) {
-          console.log(`Found potential image data in property: ${prop}`);
-          const value = responseData[prop];
-          
-          // Check if it's a string that looks like base64
-          if (typeof value === 'string' && value.length > 100) {
-            const base64Regex = /^[A-Za-z0-9+/]*={0,2}$/;
-            const cleanValue = value.replace(/^data:image\/[^;]+;base64,/, '');
-            if (base64Regex.test(cleanValue)) {
-              console.log(`Valid base64 found in ${prop}`);
-              imageBase64 = cleanValue;
-              break;
-            }
-          }
-          
-          // Check if it's a nested object
-          if (typeof value === 'object' && value.image) {
-            console.log(`Found nested image in ${prop}.image`);
-            const nestedValue = value.image;
-            if (typeof nestedValue === 'string' && nestedValue.length > 100) {
-              const base64Regex = /^[A-Za-z0-9+/]*={0,2}$/;
-              const cleanValue = nestedValue.replace(/^data:image\/[^;]+;base64,/, '');
-              if (base64Regex.test(cleanValue)) {
-                console.log(`Valid base64 found in ${prop}.image`);
-                imageBase64 = cleanValue;
-                break;
-              }
-            }
-          }
-        }
+      // Check for 'image' property first (most likely from n8n)
+      if (responseData.image && typeof responseData.image === 'string') {
+        console.log('Found image in responseData.image');
+        imageBase64 = responseData.image;
       }
-
-      // Method 2: Check for any string property that looks like base64
-      if (!imageBase64) {
-        console.log('Searching all string properties for base64-like content...');
-        for (const [key, value] of Object.entries(responseData)) {
-          if (typeof value === 'string' && value.length > 100) {
-            const base64Regex = /^[A-Za-z0-9+/]*={0,2}$/;
-            const cleanValue = value.replace(/^data:image\/[^;]+;base64,/, '');
-            if (base64Regex.test(cleanValue)) {
-              console.log(`Found potential base64 in property: ${key}`);
-              imageBase64 = cleanValue;
-              break;
-            }
-          }
-        }
+      // Check other common property names
+      else if (responseData.data && typeof responseData.data === 'string') {
+        console.log('Found image in responseData.data');
+        imageBase64 = responseData.data;
+      }
+      else if (responseData.base64 && typeof responseData.base64 === 'string') {
+        console.log('Found image in responseData.base64');
+        imageBase64 = responseData.base64;
+      }
+      // Check for nested structures
+      else if (responseData.data && responseData.data.image) {
+        console.log('Found image in responseData.data.image');
+        imageBase64 = responseData.data.image;
       }
     }
 
-    // Method 3: Check if the entire response text is base64
+    // Method 2: If response is a string, treat it as base64
+    if (!imageBase64 && typeof responseData === 'string' && responseData.length > 100) {
+      console.log('Treating entire response as base64 string');
+      imageBase64 = responseData;
+    }
+
+    // Method 3: Parse response text for base64 patterns
     if (!imageBase64 && responseText && responseText.length > 100) {
-      console.log('Checking if entire response is base64...');
-      const base64Regex = /^[A-Za-z0-9+/]*={0,2}$/;
-      const cleanText = responseText.replace(/^data:image\/[^;]+;base64,/, '').trim();
-      if (base64Regex.test(cleanText)) {
-        console.log('Entire response appears to be base64');
-        imageBase64 = cleanText;
+      console.log('Searching response text for base64 patterns');
+      
+      // Look for data URL pattern
+      const dataUrlMatch = responseText.match(/data:image\/[^;]+;base64,([A-Za-z0-9+/=]+)/);
+      if (dataUrlMatch && dataUrlMatch[1]) {
+        console.log('Found base64 in data URL');
+        imageBase64 = dataUrlMatch[1];
+      }
+      // Look for JSON with image property
+      else {
+        const imageMatch = responseText.match(/"image"\s*:\s*"([A-Za-z0-9+/=]+)"/);
+        if (imageMatch && imageMatch[1]) {
+          console.log('Found base64 in JSON image property');
+          imageBase64 = imageMatch[1];
+        }
+        // Look for standalone base64 (at least 1000 chars)
+        else {
+          const base64Match = responseText.match(/([A-Za-z0-9+/]{1000,}={0,2})/);
+          if (base64Match && base64Match[1]) {
+            console.log('Found standalone base64 pattern');
+            imageBase64 = base64Match[1];
+          }
+        }
       }
     }
 
-    // Method 4: Look for base64 patterns within the response text
-    if (!imageBase64) {
-      console.log('Searching for base64 patterns in response text...');
-      // Look for data URLs
-      const dataUrlMatch = responseText.match(/data:image\/[^;]+;base64,([A-Za-z0-9+/]*={0,2})/);
-      if (dataUrlMatch && dataUrlMatch[1] && dataUrlMatch[1].length > 100) {
-        console.log('Found base64 in data URL pattern');
-        imageBase64 = dataUrlMatch[1];
-      } else {
-        // Look for standalone base64 strings (at least 1000 characters, typical for images)
-        const base64Match = responseText.match(/([A-Za-z0-9+/]{1000,}={0,2})/);
-        if (base64Match && base64Match[1]) {
-          console.log('Found standalone base64 pattern');
-          imageBase64 = base64Match[1];
-        }
+    // Clean the base64 string
+    if (imageBase64) {
+      // Remove data URL prefix if present
+      if (imageBase64.startsWith('data:image/')) {
+        imageBase64 = imageBase64.split(',')[1];
       }
+      
+      // Remove any whitespace
+      imageBase64 = imageBase64.replace(/\s/g, '');
+      
+      console.log('Cleaned base64 length:', imageBase64.length);
+      console.log('First 50 chars:', imageBase64.substring(0, 50));
+      console.log('Last 10 chars:', imageBase64.substring(imageBase64.length - 10));
     }
 
     console.log('Image extraction result:', {
       found: !!imageBase64,
       length: imageBase64 ? imageBase64.length : 0,
-      firstChars: imageBase64 ? imageBase64.substring(0, 50) : 'none'
+      isValidLength: imageBase64 ? imageBase64.length > 1000 : false
     });
 
     return imageBase64;
@@ -231,17 +214,11 @@ function App() {
     // Create abort controller for the request
     const controller = new AbortController();
     
-    // Set multiple timeouts for better control
+    // Set timeout for the request
     const requestTimeout = setTimeout(() => {
       controller.abort();
       console.error('Request aborted due to timeout');
-    }, 90000); // Increased to 90 seconds for the actual request
-    
-    const overallTimeout = setTimeout(() => {
-      console.error('Overall timeout after 120 seconds');
-      setError('Request timed out. The image generation service may be experiencing high load. Please try again in a few minutes.');
-      setIsProcessing(false);
-    }, 120000); // 2 minutes overall timeout
+    }, 120000); // 2 minutes timeout
 
     setIsProcessing(true);
     setFormData(data);
@@ -281,18 +258,6 @@ function App() {
       console.log('=== SENDING TO WEBHOOK ===');
       console.log('Webhook URL:', WEBHOOK_URL);
       console.log('Payload:', JSON.stringify(payload, null, 2));
-
-      // Test webhook connectivity first
-      try {
-        const testResponse = await fetch(WEBHOOK_URL, {
-          method: 'HEAD',
-          signal: AbortSignal.timeout(5000), // 5 second test
-        });
-        console.log('Webhook connectivity test:', testResponse.status);
-      } catch (testError) {
-        console.warn('Webhook connectivity test failed:', testError);
-        // Continue anyway, as HEAD might not be supported
-      }
 
       const response = await fetch(WEBHOOK_URL, {
         method: 'POST',
@@ -337,7 +302,7 @@ function App() {
       const responseText = await response.text();
       console.log('=== RAW RESPONSE ===');
       console.log('Response text length:', responseText.length);
-      console.log('First 500 chars:', responseText.substring(0, 500));
+      console.log('First 200 chars:', responseText.substring(0, 200));
       console.log('Last 100 chars:', responseText.substring(Math.max(0, responseText.length - 100)));
 
       if (!responseText || responseText.trim() === '') {
@@ -350,7 +315,6 @@ function App() {
         console.log('=== PARSED JSON ===');
         console.log('Result type:', typeof result);
         console.log('Result keys:', result && typeof result === 'object' ? Object.keys(result) : 'Not an object');
-        console.log('Full result:', result);
       } catch (parseError) {
         console.error('JSON parse error:', parseError);
         console.log('Response was not valid JSON. Treating as raw data...');
@@ -487,7 +451,6 @@ function App() {
       setError(errorMessage);
     } finally {
       clearTimeout(requestTimeout);
-      clearTimeout(overallTimeout);
       setIsProcessing(false);
       console.log('=== PROCESSING COMPLETED ===');
     }
