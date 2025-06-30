@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Package, Plus, Trash2, Upload, Download, AlertCircle, CheckCircle, Clock, Wand2 } from 'lucide-react';
+import { X, Package, Plus, Trash2, Download, AlertCircle, CheckCircle, Clock, Wand2, Eye, ZoomIn } from 'lucide-react';
 import { sanitizeFormData } from '../utils/textSanitizer';
 import { HistoryImage } from '../types/history';
 import { User } from '../lib/supabase';
@@ -36,6 +36,17 @@ const CREDIT_COSTS = {
   infographic: 10,
 };
 
+// Global state to persist modal data across open/close
+let globalBulkState: {
+  [key: string]: {
+    items: BulkItem[];
+    isProcessing: boolean;
+    currentProcessingIndex: number;
+    globalStyle: string;
+    globalColour: string;
+  }
+} = {};
+
 export const BulkProcessingModal: React.FC<BulkProcessingModalProps> = ({
   isOpen,
   onClose,
@@ -47,22 +58,36 @@ export const BulkProcessingModal: React.FC<BulkProcessingModalProps> = ({
   user,
   onRefreshUser,
 }) => {
-  const [bulkItems, setBulkItems] = useState<BulkItem[]>([]);
-  const [globalStyle, setGlobalStyle] = useState('');
-  const [globalColour, setGlobalColour] = useState('');
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [currentProcessingIndex, setCurrentProcessingIndex] = useState(-1);
+  const stateKey = `bulk_${imageType}`;
+  
+  // Initialize state from global state or defaults
+  const [bulkItems, setBulkItems] = useState<BulkItem[]>(() => 
+    globalBulkState[stateKey]?.items || []
+  );
+  const [globalStyle, setGlobalStyle] = useState(() => 
+    globalBulkState[stateKey]?.globalStyle || ''
+  );
+  const [globalColour, setGlobalColour] = useState(() => 
+    globalBulkState[stateKey]?.globalColour || ''
+  );
+  const [isProcessing, setIsProcessing] = useState(() => 
+    globalBulkState[stateKey]?.isProcessing || false
+  );
+  const [currentProcessingIndex, setCurrentProcessingIndex] = useState(() => 
+    globalBulkState[stateKey]?.currentProcessingIndex || -1
+  );
+  const [previewImage, setPreviewImage] = useState<{ base64: string; title: string } | null>(null);
 
+  // Save state to global state whenever it changes
   useEffect(() => {
-    if (isOpen) {
-      // Reset state when modal opens
-      setBulkItems([]);
-      setGlobalStyle('');
-      setGlobalColour('');
-      setIsProcessing(false);
-      setCurrentProcessingIndex(-1);
-    }
-  }, [isOpen]);
+    globalBulkState[stateKey] = {
+      items: bulkItems,
+      isProcessing,
+      currentProcessingIndex,
+      globalStyle,
+      globalColour,
+    };
+  }, [bulkItems, isProcessing, currentProcessingIndex, globalStyle, globalColour, stateKey]);
 
   useEffect(() => {
     // Update parent component about processing state
@@ -98,9 +123,11 @@ export const BulkProcessingModal: React.FC<BulkProcessingModalProps> = ({
 
   const clearAllItems = () => {
     setBulkItems([]);
+    setIsProcessing(false);
+    setCurrentProcessingIndex(-1);
   };
 
-  // Enhanced image extraction function with comprehensive debugging
+  // Enhanced image extraction function (same as single image generation)
   const extractImageData = (responseData: any, responseText: string): string | null => {
     console.log('BULK: ========================================');
     console.log('BULK: STARTING IMAGE EXTRACTION');
@@ -517,6 +544,34 @@ export const BulkProcessingModal: React.FC<BulkProcessingModalProps> = ({
     console.log(`BULK: Final results: ${successCount}/${bulkItems.length} successful`);
   };
 
+  const downloadImage = (item: BulkItem) => {
+    if (!item.imageData) return;
+    
+    try {
+      const byteCharacters = atob(item.imageData);
+      const byteNumbers = new Array(byteCharacters.length);
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      }
+      const byteArray = new Uint8Array(byteNumbers);
+      const blob = new Blob([byteArray], { type: 'image/png' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      
+      const title = item.title || item.content?.substring(0, 30) || 'image';
+      const safeTitle = title.replace(/[^a-zA-Z0-9\s-_]/g, '').replace(/\s+/g, '-').toLowerCase();
+      link.download = `seo-engine-${imageType}-${safeTitle}-${Date.now()}.png`;
+      
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Download error:', error);
+    }
+  };
+
   const downloadAllImages = async () => {
     const completedItems = bulkItems.filter(item => item.status === 'completed' && item.imageData);
     
@@ -562,6 +617,7 @@ export const BulkProcessingModal: React.FC<BulkProcessingModalProps> = ({
   };
 
   const handleClose = () => {
+    // Always allow closing, but warn if processing
     if (isProcessing) {
       const confirmClose = confirm('Bulk processing is currently active. Are you sure you want to close? This will not stop the processing but you won\'t be able to monitor progress.');
       if (!confirmClose) return;
@@ -679,14 +735,39 @@ export const BulkProcessingModal: React.FC<BulkProcessingModalProps> = ({
                         Cost: {CREDIT_COSTS[imageType]} credits
                       </span>
                     </div>
-                    {!isProcessing && (
-                      <button
-                        onClick={() => removeItem(item.id)}
-                        className="p-1 text-gray-400 hover:text-red-600 rounded transition-colors"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    )}
+                    <div className="flex items-center space-x-2">
+                      {/* Preview and Download buttons for completed items */}
+                      {item.status === 'completed' && item.imageData && (
+                        <>
+                          <button
+                            onClick={() => setPreviewImage({ 
+                              base64: item.imageData!, 
+                              title: item.title || item.content.substring(0, 30) 
+                            })}
+                            className="p-2 text-blue-600 hover:bg-blue-100 rounded-lg transition-colors"
+                            title="Preview Image"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => downloadImage(item)}
+                            className="p-2 text-green-600 hover:bg-green-100 rounded-lg transition-colors"
+                            title="Download Image"
+                          >
+                            <Download className="w-4 h-4" />
+                          </button>
+                        </>
+                      )}
+                      {!isProcessing && (
+                        <button
+                          onClick={() => removeItem(item.id)}
+                          className="p-2 text-gray-400 hover:text-red-600 rounded-lg transition-colors"
+                          title="Remove Item"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
                   </div>
 
                   <div className="space-y-4">
@@ -813,6 +894,53 @@ export const BulkProcessingModal: React.FC<BulkProcessingModalProps> = ({
           </div>
         )}
       </div>
+
+      {/* Image Preview Modal */}
+      {previewImage && (
+        <div className="fixed inset-0 bg-black/90 backdrop-blur-sm z-60 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+            {/* Preview Header */}
+            <div className="p-4 border-b border-gray-200 flex items-center justify-between bg-white">
+              <h3 className="text-lg font-semibold text-gray-900">Image Preview</h3>
+              <button
+                onClick={() => setPreviewImage(null)}
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            {/* Preview Content */}
+            <div className="flex-1 overflow-auto bg-gray-50 p-4">
+              <div className="flex items-center justify-center">
+                <img
+                  src={`data:image/png;base64,${previewImage.base64}`}
+                  alt={previewImage.title}
+                  className="max-w-full max-h-full rounded-lg shadow-lg"
+                />
+              </div>
+            </div>
+            
+            {/* Preview Footer */}
+            <div className="p-4 border-t border-gray-200 bg-white">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-600">{previewImage.title}</span>
+                <button
+                  onClick={() => {
+                    // Find the item and download it
+                    const item = bulkItems.find(i => i.imageData === previewImage.base64);
+                    if (item) downloadImage(item);
+                  }}
+                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                >
+                  <Download className="w-4 h-4 mr-2 inline" />
+                  Download
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
