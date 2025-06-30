@@ -28,7 +28,7 @@ const WEBHOOK_URL = 'https://n8n.seoengine.agency/webhook/6e9e3b30-cb55-4d74-aa9
 
 function App() {
   const { user, isAuthenticated, isLoading: authLoading, signInWithEmail, signInAnonymously, signOut } = useAuth();
-  const { addToHistory } = useImageHistory();
+  const { addToHistory, history } = useImageHistory();
   const { 
     isProcessing, 
     isBulkProcessing, 
@@ -42,6 +42,11 @@ function App() {
   const [showHistorySidebar, setShowHistorySidebar] = useState(false);
   const [showBulkModal, setShowBulkModal] = useState(false);
   const [showSuccessNotification, setShowSuccessNotification] = useState(false);
+  const [bulkCompletionNotification, setBulkCompletionNotification] = useState<{
+    show: boolean;
+    completed: number;
+    total: number;
+  }>({ show: false, completed: 0, total: 0 });
   const [currentStep, setCurrentStep] = useState<Step>('select');
   const [selectedType, setSelectedType] = useState<ImageType>(null);
   const [generatedImage, setGeneratedImage] = useState<GeneratedImage | null>(null);
@@ -200,6 +205,22 @@ function App() {
     setShowBulkModal(true);
   };
 
+  const handleBulkCompleted = (completedCount: number, totalCount: number) => {
+    console.log('Bulk processing completed notification:', completedCount, totalCount);
+    setBulkCompletionNotification({
+      show: true,
+      completed: completedCount,
+      total: totalCount
+    });
+    
+    // Force refresh history sidebar if it's open
+    if (showHistorySidebar) {
+      // Close and reopen to force refresh
+      setShowHistorySidebar(false);
+      setTimeout(() => setShowHistorySidebar(true), 100);
+    }
+  };
+
   const downloadCurrentImage = () => {
     if (!generatedImage) return;
     
@@ -350,10 +371,15 @@ function App() {
                 <button
                   onClick={() => setShowHistorySidebar(true)}
                   disabled={isProcessing || isBulkProcessing}
-                  className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed relative"
                   title="View History"
                 >
                   <History className="w-4 h-4" />
+                  {history.length > 0 && (
+                    <span className="absolute -top-1 -right-1 bg-blue-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                      {history.length > 9 ? '9+' : history.length}
+                    </span>
+                  )}
                 </button>
                 <div className="flex items-center text-sm text-gray-600">
                   <User className="w-4 h-4 mr-2" />
@@ -528,6 +554,7 @@ function App() {
         onProcessingStateChange={setIsBulkProcessing}
         onProgressUpdate={setBulkProgress}
         onImageGenerated={addToHistory}
+        onBulkCompleted={handleBulkCompleted}
       />
 
       <SuccessNotification
@@ -541,6 +568,19 @@ function App() {
           if (previewElement) {
             previewElement.scrollIntoView({ behavior: 'smooth' });
           }
+        }}
+      />
+
+      {/* Bulk Completion Notification */}
+      <SuccessNotification
+        isVisible={bulkCompletionNotification.show}
+        onClose={() => setBulkCompletionNotification({ show: false, completed: 0, total: 0 })}
+        imageType="blog"
+        autoHide={true}
+        duration={8000}
+        onPreview={() => {
+          setShowHistorySidebar(true);
+          setBulkCompletionNotification({ show: false, completed: 0, total: 0 });
         }}
       />
     </div>

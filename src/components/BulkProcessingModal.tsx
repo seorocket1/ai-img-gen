@@ -21,6 +21,7 @@ interface BulkProcessingModalProps {
   onProcessingStateChange?: (isProcessing: boolean) => void;
   onProgressUpdate?: (progress: { completed: number; total: number }) => void;
   onImageGenerated?: (image: HistoryImage) => void;
+  onBulkCompleted?: (completedCount: number, totalCount: number) => void;
 }
 
 const WEBHOOK_URL = 'https://n8n.seoengine.agency/webhook/6e9e3b30-cb55-4d74-aa9d-68691983455f';
@@ -71,6 +72,7 @@ export const BulkProcessingModal: React.FC<BulkProcessingModalProps> = ({
   onProcessingStateChange,
   onProgressUpdate,
   onImageGenerated,
+  onBulkCompleted,
 }) => {
   const [items, setItems] = useState<BulkItem[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -242,19 +244,20 @@ export const BulkProcessingModal: React.FC<BulkProcessingModalProps> = ({
           processingStep: undefined,
         };
 
-        // Add to history with smooth update
-        setTimeout(() => {
-          onImageGenerated?.({
-            id: `img-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-            type: item.type,
-            base64: result.image,
-            title: item.type === 'blog' ? item.data.title : 'Infographic',
-            content: item.type === 'blog' ? item.data.intro : item.data.content,
-            timestamp: new Date(),
-            style: finalStyle,
-            colour: finalColour,
-          });
-        }, 100);
+        // Add to history with proper structure
+        const historyImage: HistoryImage = {
+          id: `img-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          type: item.type,
+          base64: result.image,
+          title: item.type === 'blog' ? item.data.title : 'Infographic',
+          content: item.type === 'blog' ? item.data.intro : item.data.content,
+          timestamp: Date.now(),
+          style: finalStyle,
+          colour: finalColour,
+        };
+
+        console.log('Adding bulk image to history:', historyImage);
+        onImageGenerated?.(historyImage);
 
         return completedItem;
       } else {
@@ -286,6 +289,7 @@ export const BulkProcessingModal: React.FC<BulkProcessingModalProps> = ({
 
     setIsProcessing(true);
     const updatedItems = [...items];
+    let completedCount = 0;
 
     for (let i = 0; i < updatedItems.length; i++) {
       const item = updatedItems[i];
@@ -312,10 +316,18 @@ export const BulkProcessingModal: React.FC<BulkProcessingModalProps> = ({
       const processedItem = await processItem(updatedItems[i]);
       updatedItems[i] = processedItem;
       setItems([...updatedItems]);
+
+      if (processedItem.status === 'completed') {
+        completedCount++;
+      }
     }
 
     setCurrentProcessing(null);
     setIsProcessing(false);
+
+    // Notify parent about bulk completion
+    console.log('Bulk processing completed:', completedCount, 'out of', validItems.length);
+    onBulkCompleted?.(completedCount, validItems.length);
   };
 
   const downloadAllAsZip = async () => {

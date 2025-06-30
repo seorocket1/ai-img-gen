@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { CheckCircle, X, Download, Eye } from 'lucide-react';
+import { CheckCircle, X, Download, Eye, Package } from 'lucide-react';
 
 interface SuccessNotificationProps {
   isVisible: boolean;
@@ -9,6 +9,9 @@ interface SuccessNotificationProps {
   onPreview?: () => void;
   autoHide?: boolean;
   duration?: number;
+  isBulkCompletion?: boolean;
+  completedCount?: number;
+  totalCount?: number;
 }
 
 export const SuccessNotification: React.FC<SuccessNotificationProps> = ({
@@ -19,6 +22,9 @@ export const SuccessNotification: React.FC<SuccessNotificationProps> = ({
   onPreview,
   autoHide = true,
   duration = 5000,
+  isBulkCompletion = false,
+  completedCount = 0,
+  totalCount = 0,
 }) => {
   const [isAnimating, setIsAnimating] = useState(false);
   const [progress, setProgress] = useState(100);
@@ -58,6 +64,9 @@ export const SuccessNotification: React.FC<SuccessNotificationProps> = ({
 
   if (!isVisible) return null;
 
+  // Determine if this is a bulk completion notification based on props
+  const isBulk = completedCount > 0 && totalCount > 0;
+
   return (
     <div className="fixed top-4 right-4 z-50">
       <div
@@ -67,17 +76,29 @@ export const SuccessNotification: React.FC<SuccessNotificationProps> = ({
       >
         <div className="flex items-start space-x-3">
           <div className="flex-shrink-0">
-            <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center">
-              <CheckCircle className="w-6 h-6 text-green-600" />
+            <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+              isBulk ? 'bg-purple-100' : 'bg-green-100'
+            }`}>
+              {isBulk ? (
+                <Package className="w-6 h-6 text-purple-600" />
+              ) : (
+                <CheckCircle className="w-6 h-6 text-green-600" />
+              )}
             </div>
           </div>
           
           <div className="flex-1 min-w-0">
             <h4 className="text-sm font-semibold text-gray-900 mb-1">
-              Image Generated Successfully!
+              {isBulk 
+                ? 'Bulk Processing Complete!' 
+                : 'Image Generated Successfully!'
+              }
             </h4>
             <p className="text-sm text-gray-600 mb-3">
-              Your {imageType === 'blog' ? 'blog featured image' : 'infographic'} has been created and added to your history.
+              {isBulk 
+                ? `Successfully generated ${completedCount} out of ${totalCount} images. Check your history to view all generated images.`
+                : `Your ${imageType === 'blog' ? 'blog featured image' : 'infographic'} has been created and added to your history.`
+              }
             </p>
             
             <div className="flex items-center space-x-2">
@@ -87,10 +108,10 @@ export const SuccessNotification: React.FC<SuccessNotificationProps> = ({
                   className="flex items-center px-3 py-1.5 text-xs font-medium text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                 >
                   <Eye className="w-3 h-3 mr-1" />
-                  Preview
+                  {isBulk ? 'View History' : 'Preview'}
                 </button>
               )}
-              {onDownload && (
+              {onDownload && !isBulk && (
                 <button
                   onClick={onDownload}
                   className="flex items-center px-3 py-1.5 text-xs font-medium text-green-600 hover:bg-green-50 rounded-lg transition-colors"
@@ -114,7 +135,9 @@ export const SuccessNotification: React.FC<SuccessNotificationProps> = ({
         {autoHide && (
           <div className="mt-3 w-full bg-gray-200 rounded-full h-1">
             <div 
-              className="bg-green-500 h-1 rounded-full transition-all duration-100 ease-linear"
+              className={`h-1 rounded-full transition-all duration-100 ease-linear ${
+                isBulk ? 'bg-purple-500' : 'bg-green-500'
+              }`}
               style={{ width: `${progress}%` }}
             />
           </div>

@@ -6,8 +6,9 @@ const MAX_HISTORY_ITEMS = 50;
 
 export const useImageHistory = () => {
   const [history, setHistory] = useState<HistoryImage[]>([]);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
 
-  // Load history from localStorage on mount
+  // Load history from localStorage on mount and when refresh is triggered
   useEffect(() => {
     try {
       const savedHistory = localStorage.getItem(STORAGE_KEY);
@@ -41,7 +42,7 @@ export const useImageHistory = () => {
       // Clear corrupted data
       localStorage.removeItem(STORAGE_KEY);
     }
-  }, []);
+  }, [refreshTrigger]);
 
   // Save history to localStorage whenever it changes
   useEffect(() => {
@@ -85,6 +86,11 @@ export const useImageHistory = () => {
       return trimmed;
     });
 
+    // Force a refresh to ensure UI updates
+    setTimeout(() => {
+      setRefreshTrigger(prev => prev + 1);
+    }, 100);
+
     return image;
   };
 
@@ -107,6 +113,10 @@ export const useImageHistory = () => {
     return history.find(img => img.id === id);
   };
 
+  const forceRefresh = () => {
+    setRefreshTrigger(prev => prev + 1);
+  };
+
   // Debug log current state
   console.log('Current history state:', {
     length: history.length,
@@ -119,5 +129,6 @@ export const useImageHistory = () => {
     removeImage,
     clearHistory,
     getImageById,
+    forceRefresh,
   };
 };
