@@ -55,7 +55,7 @@ export const signUp = async (userData: {
     if (authError) throw authError;
 
     if (authData.user) {
-      // Create user profile with custom user_id
+      // Create user profile with custom user_id (removed password_hash field)
       const { data: profileData, error: profileError } = await supabase
         .from('users')
         .insert({
@@ -65,7 +65,6 @@ export const signUp = async (userData: {
           brand_name: userData.brand_name,
           website_url: userData.website_url,
           user_id: userData.user_id,
-          password_hash: 'handled_by_supabase_auth', // Placeholder since Supabase handles this
         })
         .select()
         .single();
@@ -92,14 +91,20 @@ export const signIn = async (email: string, password: string) => {
     if (authError) throw authError;
 
     if (authData.user) {
-      // Get user profile
+      // Get user profile using maybeSingle() to handle missing profiles gracefully
       const { data: profileData, error: profileError } = await supabase
         .from('users')
         .select('*')
         .eq('id', authData.user.id)
-        .single();
+        .maybeSingle();
 
       if (profileError) throw profileError;
+
+      // If no profile found, sign out and throw error
+      if (!profileData) {
+        await supabase.auth.signOut();
+        throw new Error('User profile not found. Please contact support.');
+      }
 
       return { user: profileData, authUser: authData.user };
     }
@@ -132,13 +137,20 @@ export const getCurrentUser = async () => {
     
     if (!authUser) return null;
 
+    // Use maybeSingle() to handle missing profiles gracefully
     const { data: profileData, error: profileError } = await supabase
       .from('users')
       .select('*')
       .eq('id', authUser.id)
-      .single();
+      .maybeSingle();
 
     if (profileError) throw profileError;
+
+    // If no profile found, sign out and return null
+    if (!profileData) {
+      await supabase.auth.signOut();
+      return null;
+    }
 
     return { user: profileData, authUser };
   } catch (error) {
