@@ -311,9 +311,21 @@ export const deductCredits = async (userId: string, amount: number) => {
   const client = ensureSupabaseConfigured();
   
   try {
+    // First get current credits to calculate new value
+    const { data: currentUser, error: fetchError } = await client
+      .from('users')
+      .select('credits')
+      .eq('id', userId)
+      .single();
+
+    if (fetchError) throw fetchError;
+
+    const newCredits = currentUser.credits - amount;
+    
+    // Update with the calculated value
     const { data, error } = await client
       .from('users')
-      .update({ credits: client.sql`credits - ${amount}` })
+      .update({ credits: newCredits })
       .eq('id', userId)
       .select('credits')
       .single();
@@ -330,9 +342,21 @@ export const addCredits = async (userId: string, amount: number) => {
   const client = ensureSupabaseConfigured();
   
   try {
+    // First get current credits to calculate new value
+    const { data: currentUser, error: fetchError } = await client
+      .from('users')
+      .select('credits')
+      .eq('id', userId)
+      .single();
+
+    if (fetchError) throw fetchError;
+
+    const newCredits = currentUser.credits + amount;
+    
+    // Update with the calculated value
     const { data, error } = await client
       .from('users')
-      .update({ credits: client.sql`credits + ${amount}` })
+      .update({ credits: newCredits })
       .eq('id', userId)
       .select('credits')
       .single();
