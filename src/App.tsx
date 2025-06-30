@@ -125,6 +125,13 @@ function App() {
     setFormData(data);
     setError(null);
     
+    // Set a timeout to prevent infinite loading
+    const timeoutId = setTimeout(() => {
+      console.error('Request timeout after 2 minutes');
+      setError('Request timed out. Please try again.');
+      setIsProcessing(false);
+    }, 120000); // 2 minutes timeout
+    
     try {
       console.log('=== STARTING IMAGE GENERATION ===');
       console.log('Selected type:', selectedType);
@@ -160,13 +167,21 @@ function App() {
       console.log('Webhook URL:', WEBHOOK_URL);
       console.log('Payload:', JSON.stringify(payload, null, 2));
 
+      const controller = new AbortController();
+      const requestTimeoutId = setTimeout(() => {
+        controller.abort();
+      }, 90000); // 90 seconds for the actual request
+
       const response = await fetch(WEBHOOK_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(payload),
+        signal: controller.signal,
       });
+
+      clearTimeout(requestTimeoutId);
 
       console.log('=== WEBHOOK RESPONSE ===');
       console.log('Response status:', response.status);
@@ -175,7 +190,9 @@ function App() {
       console.log('Response headers:', Object.fromEntries(response.headers.entries()));
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status} - ${response.statusText}`);
+        const errorText = await response.text();
+        console.error('Error response body:', errorText);
+        throw new Error(`HTTP error! status: ${response.status} - ${response.statusText}. Response: ${errorText}`);
       }
 
       // Get response as text first to debug
@@ -186,7 +203,7 @@ function App() {
       console.log('Last 100 chars:', responseText.substring(Math.max(0, responseText.length - 100)));
 
       if (!responseText || responseText.trim() === '') {
-        throw new Error('Empty response received from server');
+        throw new Error('Empty response received from server. The image generation service may be temporarily unavailable.');
       }
 
       let result;
@@ -206,7 +223,7 @@ function App() {
           console.log('Response appears to be base64 string');
           result = { image: responseText.trim() };
         } else {
-          throw new Error(`Invalid response format. Expected JSON but got: ${responseText.substring(0, 200)}...`);
+          throw new Error(`Invalid response format. Expected JSON or base64 but got: ${responseText.substring(0, 200)}...`);
         }
       }
 
@@ -261,7 +278,7 @@ function App() {
       if (!imageBase64) {
         console.error('=== NO IMAGE DATA FOUND ===');
         console.error('Full response structure:', JSON.stringify(result, null, 2));
-        throw new Error('No image data found in response. Please check the webhook response format.');
+        throw new Error('No image data found in response. The image generation service may have failed. Please try again.');
       }
 
       // Clean the base64 string (remove data URL prefix if present)
@@ -272,7 +289,7 @@ function App() {
 
       // Validate base64 string
       if (imageBase64.length < 100) {
-        throw new Error('Received image data is too short to be valid');
+        throw new Error('Received image data is too short to be valid. Please try again.');
       }
 
       // Test if it's valid base64
@@ -281,7 +298,7 @@ function App() {
         console.log('Base64 validation passed');
       } catch (base64Error) {
         console.error('Base64 validation failed:', base64Error);
-        throw new Error('Received data is not valid base64 format');
+        throw new Error('Received data is not valid base64 format. Please try again.');
       }
 
       console.log('=== PROCESSING CREDITS AND DATABASE ===');
@@ -362,14 +379,18 @@ function App() {
       let errorMessage = 'Failed to generate image. Please try again.';
       
       if (error instanceof Error) {
-        if (error.message.includes('JSON')) {
-          errorMessage = 'Invalid response format from server. Please contact support.';
+        if (error.name === 'AbortError') {
+          errorMessage = 'Request timed out. The image generation is taking longer than expected. Please try again.';
+        } else if (error.message.includes('JSON')) {
+          errorMessage = 'Invalid response format from server. Please contact support if this persists.';
         } else if (error.message.includes('HTTP error')) {
           errorMessage = `Server error: ${error.message}`;
         } else if (error.message.includes('Empty response')) {
-          errorMessage = 'No response received from server. Please try again.';
+          errorMessage = 'No response received from server. The service may be temporarily unavailable. Please try again.';
         } else if (error.message.includes('base64')) {
           errorMessage = 'Invalid image data received. Please try again.';
+        } else if (error.message.includes('timeout') || error.message.includes('timed out')) {
+          errorMessage = 'Request timed out. Please try again with a shorter description or try again later.';
         } else {
           errorMessage = error.message;
         }
@@ -377,6 +398,7 @@ function App() {
       
       setError(errorMessage);
     } finally {
+      clearTimeout(timeoutId);
       setIsProcessing(false);
       console.log('=== PROCESSING COMPLETED ===');
     }
