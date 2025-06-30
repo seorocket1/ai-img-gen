@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Sparkles, Zap, LogOut, User, History, Settings, CreditCard, AlertCircle, Brain, Palette, Wand2, ArrowRight, Star, Layers, Cpu, Image as ImageIcon } from 'lucide-react';
+import { Sparkles, Zap, LogOut, User, History, Settings, CreditCard, AlertCircle, Brain, Cpu, Palette, Layers } from 'lucide-react';
 import { ImageTypeSelector } from './components/ImageTypeSelector';
 import { BlogImageForm } from './components/BlogImageForm';
 import { InfographicForm } from './components/InfographicForm';
@@ -113,141 +113,92 @@ function App() {
     return true;
   };
 
-  // Enhanced image extraction function with comprehensive debugging (same as bulk modal)
+  // Simplified and more robust image extraction function
   const extractImageData = (responseData: any, responseText: string): string | null => {
-    console.log('SINGLE: ========================================');
-    console.log('SINGLE: STARTING IMAGE EXTRACTION');
-    console.log('SINGLE: ========================================');
-    console.log('SINGLE: Response data type:', typeof responseData);
-    console.log('SINGLE: Response data:', responseData);
-    console.log('SINGLE: Response text length:', responseText.length);
-    console.log('SINGLE: Response text (first 500 chars):', responseText.substring(0, 500));
-    console.log('SINGLE: Response text (last 200 chars):', responseText.substring(Math.max(0, responseText.length - 200)));
+    console.log('=== EXTRACTING IMAGE DATA ===');
+    console.log('Response data type:', typeof responseData);
+    console.log('Response text length:', responseText.length);
+    console.log('Response data keys:', responseData && typeof responseData === 'object' ? Object.keys(responseData) : 'Not an object');
 
     let imageBase64 = null;
 
-    // Method 1: Direct access to 'image' property in parsed object
-    if (responseData && typeof responseData === 'object' && responseData.image) {
-      console.log('SINGLE: ✅ Method 1: Found image property in response object');
-      console.log('SINGLE: Image property type:', typeof responseData.image);
-      console.log('SINGLE: Image property length:', responseData.image.length);
-      console.log('SINGLE: Image property (first 100 chars):', responseData.image.substring(0, 100));
-      imageBase64 = responseData.image;
-    }
-    // Method 2: If responseData is a string, try to parse it as JSON
-    else if (typeof responseData === 'string') {
-      console.log('SINGLE: 🔄 Method 2: Response data is string, attempting JSON parse');
-      try {
-        const parsed = JSON.parse(responseData);
-        console.log('SINGLE: Successfully parsed string as JSON');
-        console.log('SINGLE: Parsed object keys:', Object.keys(parsed));
-        if (parsed && parsed.image) {
-          console.log('SINGLE: ✅ Found image in parsed string');
-          console.log('SINGLE: Image length:', parsed.image.length);
-          imageBase64 = parsed.image;
-        } else {
-          console.log('SINGLE: ❌ No image property in parsed object');
-        }
-      } catch (parseError) {
-        console.log('SINGLE: ❌ Failed to parse string as JSON:', parseError);
-        // If it's a long string, maybe it's raw base64
-        if (responseData.length > 1000) {
-          console.log('SINGLE: 🔄 Treating long string as potential raw base64');
-          imageBase64 = responseData;
-        }
+    // Method 1: Direct property access (most common case)
+    if (responseData && typeof responseData === 'object') {
+      // Check for 'image' property first (most likely from n8n)
+      if (responseData.image && typeof responseData.image === 'string') {
+        console.log('Found image in responseData.image');
+        imageBase64 = responseData.image;
       }
-    }
-    // Method 3: Parse responseText directly
-    else if (responseText && responseText.includes('"image"')) {
-      console.log('SINGLE: 🔄 Method 3: Parsing response text for image property');
-      try {
-        const parsed = JSON.parse(responseText);
-        console.log('SINGLE: Successfully parsed response text as JSON');
-        console.log('SINGLE: Parsed object keys:', Object.keys(parsed));
-        if (parsed && parsed.image) {
-          console.log('SINGLE: ✅ Found image in parsed response text');
-          console.log('SINGLE: Image length:', parsed.image.length);
-          imageBase64 = parsed.image;
-        }
-      } catch (parseError) {
-        console.log('SINGLE: ❌ Failed to parse response text as JSON, trying regex');
-        // Try regex extraction as fallback
-        const match = responseText.match(/"image"\s*:\s*"([^"]+)"/);
-        if (match && match[1]) {
-          console.log('SINGLE: ✅ Found image using regex extraction');
-          console.log('SINGLE: Regex match length:', match[1].length);
-          imageBase64 = match[1];
-        } else {
-          console.log('SINGLE: ❌ Regex extraction failed');
-        }
+      // Check other common property names
+      else if (responseData.data && typeof responseData.data === 'string') {
+        console.log('Found image in responseData.data');
+        imageBase64 = responseData.data;
       }
-    }
-    // Method 4: Look for any base64-like patterns in the response
-    else {
-      console.log('SINGLE: 🔄 Method 4: Looking for base64 patterns in response');
-      // Look for long base64-like strings
-      const base64Pattern = /[A-Za-z0-9+/]{1000,}={0,2}/g;
-      const matches = responseText.match(base64Pattern);
-      if (matches && matches.length > 0) {
-        console.log('SINGLE: ✅ Found base64 pattern, using first match');
-        console.log('SINGLE: Pattern match length:', matches[0].length);
-        imageBase64 = matches[0];
-      } else {
-        console.log('SINGLE: ❌ No base64 patterns found');
+      else if (responseData.base64 && typeof responseData.base64 === 'string') {
+        console.log('Found image in responseData.base64');
+        imageBase64 = responseData.base64;
+      }
+      // Check for nested structures
+      else if (responseData.data && responseData.data.image) {
+        console.log('Found image in responseData.data.image');
+        imageBase64 = responseData.data.image;
       }
     }
 
-    // Clean and validate the base64 string
-    if (imageBase64) {
-      console.log('SINGLE: 🧹 Cleaning base64 string...');
-      console.log('SINGLE: Original length:', imageBase64.length);
+    // Method 2: If response is a string, treat it as base64
+    if (!imageBase64 && typeof responseData === 'string' && responseData.length > 100) {
+      console.log('Treating entire response as base64 string');
+      imageBase64 = responseData;
+    }
+
+    // Method 3: Parse response text for base64 patterns
+    if (!imageBase64 && responseText && responseText.length > 100) {
+      console.log('Searching response text for base64 patterns');
       
+      // Look for data URL pattern
+      const dataUrlMatch = responseText.match(/data:image\/[^;]+;base64,([A-Za-z0-9+/=]+)/);
+      if (dataUrlMatch && dataUrlMatch[1]) {
+        console.log('Found base64 in data URL');
+        imageBase64 = dataUrlMatch[1];
+      }
+      // Look for JSON with image property
+      else {
+        const imageMatch = responseText.match(/"image"\s*:\s*"([A-Za-z0-9+/=]+)"/);
+        if (imageMatch && imageMatch[1]) {
+          console.log('Found base64 in JSON image property');
+          imageBase64 = imageMatch[1];
+        }
+        // Look for standalone base64 (at least 1000 chars)
+        else {
+          const base64Match = responseText.match(/([A-Za-z0-9+/]{1000,}={0,2})/);
+          if (base64Match && base64Match[1]) {
+            console.log('Found standalone base64 pattern');
+            imageBase64 = base64Match[1];
+          }
+        }
+      }
+    }
+
+    // Clean the base64 string
+    if (imageBase64) {
       // Remove data URL prefix if present
       if (imageBase64.startsWith('data:image/')) {
-        console.log('SINGLE: Removing data URL prefix');
         imageBase64 = imageBase64.split(',')[1];
       }
       
-      // Remove any whitespace, newlines, and other unwanted characters
-      const originalLength = imageBase64.length;
-      imageBase64 = imageBase64.replace(/[\s\n\r\t]/g, '');
-      console.log('SINGLE: Removed whitespace, length change:', originalLength, '->', imageBase64.length);
+      // Remove any whitespace
+      imageBase64 = imageBase64.replace(/\s/g, '');
       
-      console.log('SINGLE: Final cleaned length:', imageBase64.length);
-      console.log('SINGLE: First 50 chars:', imageBase64.substring(0, 50));
-      console.log('SINGLE: Last 20 chars:', imageBase64.substring(imageBase64.length - 20));
-      
-      // Validate base64 format
-      const base64Regex = /^[A-Za-z0-9+/]*={0,2}$/;
-      if (!base64Regex.test(imageBase64)) {
-        console.log('SINGLE: ❌ Invalid base64 format detected');
-        console.log('SINGLE: Invalid characters found in base64 string');
-        return null;
-      }
-      
-      // Check minimum length
-      if (imageBase64.length < 1000) {
-        console.log('SINGLE: ❌ Base64 string too short:', imageBase64.length);
-        return null;
-      }
-      
-      // Test decode a small portion
-      try {
-        atob(imageBase64.substring(0, 100));
-        console.log('SINGLE: ✅ Base64 decode test passed');
-      } catch (decodeError) {
-        console.log('SINGLE: ❌ Base64 decode test failed:', decodeError);
-        return null;
-      }
+      console.log('Cleaned base64 length:', imageBase64.length);
+      console.log('First 50 chars:', imageBase64.substring(0, 50));
+      console.log('Last 10 chars:', imageBase64.substring(imageBase64.length - 10));
     }
 
-    console.log('SINGLE: ========================================');
-    console.log('SINGLE: EXTRACTION RESULT:', {
+    console.log('Image extraction result:', {
       found: !!imageBase64,
       length: imageBase64 ? imageBase64.length : 0,
       isValidLength: imageBase64 ? imageBase64.length > 1000 : false
     });
-    console.log('SINGLE: ========================================');
 
     return imageBase64;
   };
@@ -266,7 +217,7 @@ function App() {
     // Set timeout for the request
     const requestTimeout = setTimeout(() => {
       controller.abort();
-      console.error('SINGLE: Request aborted due to timeout');
+      console.error('Request aborted due to timeout');
     }, 120000); // 2 minutes timeout
 
     setIsProcessing(true);
@@ -274,15 +225,13 @@ function App() {
     setError(null);
     
     try {
-      console.log('SINGLE: ===========================================');
-      console.log('SINGLE: STARTING SINGLE IMAGE GENERATION');
-      console.log('SINGLE: ===========================================');
-      console.log('SINGLE: Selected type:', selectedType);
-      console.log('SINGLE: Raw form data:', data);
+      console.log('=== STARTING IMAGE GENERATION ===');
+      console.log('Selected type:', selectedType);
+      console.log('Raw form data:', data);
       
       // Sanitize the data before sending
       const sanitizedData = sanitizeFormData(data);
-      console.log('SINGLE: Sanitized data:', sanitizedData);
+      console.log('Sanitized data:', sanitizedData);
       
       // Prepare image detail with style and colour if provided
       let imageDetail = '';
@@ -306,9 +255,9 @@ function App() {
         image_detail: imageDetail,
       };
 
-      console.log('SINGLE: 📤 SENDING TO WEBHOOK');
-      console.log('SINGLE: Webhook URL:', WEBHOOK_URL);
-      console.log('SINGLE: Payload:', JSON.stringify(payload, null, 2));
+      console.log('=== SENDING TO WEBHOOK ===');
+      console.log('Webhook URL:', WEBHOOK_URL);
+      console.log('Payload:', JSON.stringify(payload, null, 2));
 
       const response = await fetch(WEBHOOK_URL, {
         method: 'POST',
@@ -323,19 +272,19 @@ function App() {
 
       clearTimeout(requestTimeout);
 
-      console.log('SINGLE: 📥 WEBHOOK RESPONSE');
-      console.log('SINGLE: Response status:', response.status);
-      console.log('SINGLE: Response ok:', response.ok);
-      console.log('SINGLE: Response status text:', response.statusText);
-      console.log('SINGLE: Response headers:', Object.fromEntries(response.headers.entries()));
+      console.log('=== WEBHOOK RESPONSE ===');
+      console.log('Response status:', response.status);
+      console.log('Response ok:', response.ok);
+      console.log('Response status text:', response.statusText);
+      console.log('Response headers:', Object.fromEntries(response.headers.entries()));
 
       if (!response.ok) {
         let errorText = '';
         try {
           errorText = await response.text();
-          console.error('SINGLE: Error response body:', errorText);
+          console.error('Error response body:', errorText);
         } catch (e) {
-          console.error('SINGLE: Could not read error response body');
+          console.error('Could not read error response body');
         }
         
         if (response.status === 404) {
@@ -351,10 +300,10 @@ function App() {
 
       // Get response as text first to debug
       const responseText = await response.text();
-      console.log('SINGLE: 📄 RAW RESPONSE');
-      console.log('SINGLE: Response text length:', responseText.length);
-      console.log('SINGLE: First 200 chars:', responseText.substring(0, 200));
-      console.log('SINGLE: Last 100 chars:', responseText.substring(Math.max(0, responseText.length - 100)));
+      console.log('=== RAW RESPONSE ===');
+      console.log('Response text length:', responseText.length);
+      console.log('First 200 chars:', responseText.substring(0, 200));
+      console.log('Last 100 chars:', responseText.substring(Math.max(0, responseText.length - 100)));
 
       if (!responseText || responseText.trim() === '') {
         throw new Error('Empty response received from image generation service. Please try again.');
@@ -363,12 +312,12 @@ function App() {
       let result;
       try {
         result = JSON.parse(responseText);
-        console.log('SINGLE: ✅ PARSED JSON');
-        console.log('SINGLE: Result type:', typeof result);
-        console.log('SINGLE: Result keys:', result && typeof result === 'object' ? Object.keys(result) : 'Not an object');
+        console.log('=== PARSED JSON ===');
+        console.log('Result type:', typeof result);
+        console.log('Result keys:', result && typeof result === 'object' ? Object.keys(result) : 'Not an object');
       } catch (parseError) {
-        console.error('SINGLE: ❌ JSON parse error:', parseError);
-        console.log('SINGLE: Response was not valid JSON. Treating as raw data...');
+        console.error('JSON parse error:', parseError);
+        console.log('Response was not valid JSON. Treating as raw data...');
         
         // If it's not JSON, treat the entire response as potential image data
         result = responseText.trim();
@@ -377,14 +326,14 @@ function App() {
       // Use enhanced image extraction function
       const imageBase64 = extractImageData(result, responseText);
 
-      console.log('SINGLE: 🔍 IMAGE DATA VALIDATION');
-      console.log('SINGLE: Image base64 found:', !!imageBase64);
-      console.log('SINGLE: Image base64 length:', imageBase64 ? imageBase64.length : 0);
+      console.log('=== IMAGE DATA VALIDATION ===');
+      console.log('Image base64 found:', !!imageBase64);
+      console.log('Image base64 length:', imageBase64 ? imageBase64.length : 0);
 
       if (!imageBase64) {
-        console.error('SINGLE: 💥 NO IMAGE DATA FOUND');
-        console.error('SINGLE: Full response structure:', JSON.stringify(result, null, 2));
-        console.error('SINGLE: Response text sample:', responseText.substring(0, 1000));
+        console.error('=== NO IMAGE DATA FOUND ===');
+        console.error('Full response structure:', JSON.stringify(result, null, 2));
+        console.error('Response text sample:', responseText.substring(0, 1000));
         throw new Error('No image data found in response. The image generation service may have failed. Please try again.');
       }
 
@@ -396,24 +345,24 @@ function App() {
       // Test if it's valid base64
       try {
         atob(imageBase64.substring(0, 100)); // Test decode a small portion
-        console.log('SINGLE: ✅ Base64 validation passed');
+        console.log('Base64 validation passed');
       } catch (base64Error) {
-        console.error('SINGLE: ❌ Base64 validation failed:', base64Error);
+        console.error('Base64 validation failed:', base64Error);
         throw new Error('Received data is not valid base64 format. Please try again.');
       }
 
-      console.log('SINGLE: 💳 PROCESSING CREDITS AND DATABASE');
+      console.log('=== PROCESSING CREDITS AND DATABASE ===');
 
       // Deduct credits for authenticated users (only if Supabase is configured)
       if (user && isAuthenticated && isSupabaseConfigured) {
         try {
-          console.log('SINGLE: Deducting credits for user:', user.id, 'Amount:', CREDIT_COSTS[selectedType]);
+          console.log('Deducting credits for user:', user.id, 'Amount:', CREDIT_COSTS[selectedType]);
           const { deductCredits } = await import('./lib/supabase');
           const newCredits = await deductCredits(user.id, CREDIT_COSTS[selectedType]);
-          console.log('SINGLE: Credits deducted successfully. New balance:', newCredits);
+          console.log('Credits deducted successfully. New balance:', newCredits);
           await refreshUser(); // Refresh user data to update credits
         } catch (creditError) {
-          console.error('SINGLE: Error deducting credits:', creditError);
+          console.error('Error deducting credits:', creditError);
           // Continue with image generation even if credit deduction fails
         }
       }
@@ -421,7 +370,7 @@ function App() {
       // Save to database for authenticated users (only if Supabase is configured)
       if (user && isAuthenticated && isSupabaseConfigured) {
         try {
-          console.log('SINGLE: Saving image generation to database');
+          console.log('Saving image generation to database');
           const { saveImageGeneration } = await import('./lib/supabase');
           await saveImageGeneration({
             user_id: user.id,
@@ -433,21 +382,21 @@ function App() {
             credits_used: CREDIT_COSTS[selectedType],
             image_data: imageBase64,
           });
-          console.log('SINGLE: Image generation saved to database successfully');
+          console.log('Image generation saved to database successfully');
         } catch (dbError) {
-          console.error('SINGLE: Error saving to database:', dbError);
+          console.error('Error saving to database:', dbError);
           // Continue with local storage even if database save fails
         }
       }
 
-      console.log('SINGLE: 🎉 FINALIZING IMAGE GENERATION');
+      console.log('=== FINALIZING IMAGE GENERATION ===');
 
       const newImage = {
         base64: imageBase64,
         type: selectedType as 'blog' | 'infographic',
       };
       
-      console.log('SINGLE: Setting generated image');
+      console.log('Setting generated image');
       setGeneratedImage(newImage);
       setCurrentStep('result');
       
@@ -463,7 +412,7 @@ function App() {
         colour: sanitizedData.colour || undefined,
       };
       
-      console.log('SINGLE: Adding image to history:', historyImage.id);
+      console.log('Adding image to history:', historyImage.id);
       
       // Add to history immediately - this will trigger real-time updates
       addToHistory(historyImage);
@@ -471,11 +420,11 @@ function App() {
       // Show success notification
       setShowSuccessNotification(true);
       
-      console.log('SINGLE: ✅ IMAGE GENERATION COMPLETED SUCCESSFULLY');
+      console.log('=== IMAGE GENERATION COMPLETED SUCCESSFULLY ===');
     } catch (error) {
-      console.error('SINGLE: 💥 IMAGE GENERATION ERROR');
-      console.error('SINGLE: Error details:', error);
-      console.error('SINGLE: Error stack:', error instanceof Error ? error.stack : 'No stack trace');
+      console.error('=== IMAGE GENERATION ERROR ===');
+      console.error('Error details:', error);
+      console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace');
       
       let errorMessage = 'Failed to generate image. Please try again.';
       
@@ -503,7 +452,7 @@ function App() {
     } finally {
       clearTimeout(requestTimeout);
       setIsProcessing(false);
-      console.log('SINGLE: 🏁 PROCESSING COMPLETED');
+      console.log('=== PROCESSING COMPLETED ===');
     }
   };
 
@@ -636,243 +585,148 @@ function App() {
   // Show authentication screen if not authenticated
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900 relative overflow-hidden">
+      <div className="h-screen bg-gradient-to-br from-slate-900 via-gray-900 to-slate-800 relative overflow-hidden flex flex-col">
         {/* Animated Background Elements */}
-        <div className="absolute inset-0">
+        <div className="absolute inset-0 overflow-hidden">
           {/* Floating Orbs */}
-          <div className="absolute top-20 left-20 w-32 h-32 bg-gradient-to-r from-blue-400/20 to-cyan-400/20 rounded-full blur-xl animate-pulse"></div>
-          <div className="absolute top-40 right-32 w-24 h-24 bg-gradient-to-r from-purple-400/20 to-pink-400/20 rounded-full blur-xl animate-pulse delay-1000"></div>
-          <div className="absolute bottom-32 left-32 w-40 h-40 bg-gradient-to-r from-green-400/20 to-blue-400/20 rounded-full blur-xl animate-pulse delay-2000"></div>
-          <div className="absolute bottom-20 right-20 w-28 h-28 bg-gradient-to-r from-yellow-400/20 to-orange-400/20 rounded-full blur-xl animate-pulse delay-3000"></div>
+          <div className="absolute top-20 left-20 w-32 h-32 bg-gradient-to-r from-emerald-400/20 to-teal-500/20 rounded-full blur-xl animate-pulse"></div>
+          <div className="absolute top-40 right-32 w-24 h-24 bg-gradient-to-r from-amber-400/20 to-orange-500/20 rounded-full blur-xl animate-pulse delay-1000"></div>
+          <div className="absolute bottom-32 left-32 w-40 h-40 bg-gradient-to-r from-violet-400/20 to-purple-500/20 rounded-full blur-xl animate-pulse delay-2000"></div>
+          <div className="absolute bottom-20 right-20 w-28 h-28 bg-gradient-to-r from-rose-400/20 to-pink-500/20 rounded-full blur-xl animate-pulse delay-3000"></div>
           
           {/* Neural Network Lines */}
-          <svg className="absolute inset-0 w-full h-full opacity-10" viewBox="0 0 1000 1000">
-            <defs>
-              <linearGradient id="lineGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="#3B82F6" />
-                <stop offset="50%" stopColor="#8B5CF6" />
-                <stop offset="100%" stopColor="#EC4899" />
-              </linearGradient>
-            </defs>
-            <path d="M100,200 Q300,100 500,200 T900,200" stroke="url(#lineGradient)" strokeWidth="2" fill="none" className="animate-pulse" />
-            <path d="M200,400 Q400,300 600,400 T1000,400" stroke="url(#lineGradient)" strokeWidth="2" fill="none" className="animate-pulse delay-500" />
-            <path d="M50,600 Q250,500 450,600 T850,600" stroke="url(#lineGradient)" strokeWidth="2" fill="none" className="animate-pulse delay-1000" />
-            <circle cx="200" cy="200" r="4" fill="#3B82F6" className="animate-pulse" />
-            <circle cx="500" cy="200" r="4" fill="#8B5CF6" className="animate-pulse delay-300" />
-            <circle cx="800" cy="200" r="4" fill="#EC4899" className="animate-pulse delay-600" />
-          </svg>
+          <div className="absolute inset-0">
+            <svg className="w-full h-full opacity-10" viewBox="0 0 1000 1000">
+              <defs>
+                <linearGradient id="neuralGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="#10b981" />
+                  <stop offset="50%" stopColor="#f59e0b" />
+                  <stop offset="100%" stopColor="#8b5cf6" />
+                </linearGradient>
+              </defs>
+              <path d="M100,200 Q300,100 500,200 T900,200" stroke="url(#neuralGradient)" strokeWidth="2" fill="none" className="animate-pulse" />
+              <path d="M100,400 Q300,300 500,400 T900,400" stroke="url(#neuralGradient)" strokeWidth="2" fill="none" className="animate-pulse delay-1000" />
+              <path d="M100,600 Q300,500 500,600 T900,600" stroke="url(#neuralGradient)" strokeWidth="2" fill="none" className="animate-pulse delay-2000" />
+              <path d="M100,800 Q300,700 500,800 T900,800" stroke="url(#neuralGradient)" strokeWidth="2" fill="none" className="animate-pulse delay-3000" />
+            </svg>
+          </div>
         </div>
-
+        
         {/* Header */}
-        <header className="relative z-10 bg-black/10 backdrop-blur-xl border-b border-white/10">
+        <header className="bg-slate-900/50 backdrop-blur-xl border-b border-slate-700/50 relative z-10 flex-shrink-0">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center">
-                <div className="flex items-center justify-center w-12 h-12 rounded-2xl bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 mr-4 shadow-2xl">
-                  <Brain className="w-6 h-6 text-white" />
+                <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 mr-3 shadow-lg">
+                  <Brain className="w-5 h-5 text-white" />
                 </div>
                 <div>
-                  <h1 className="text-2xl font-bold bg-gradient-to-r from-white to-blue-200 bg-clip-text text-transparent">
-                    AI Image Generator
-                  </h1>
-                  <p className="text-sm text-blue-200/80 hidden sm:block">Powered by Advanced Neural Networks</p>
+                  <h1 className="text-xl font-bold text-white">AI Image Generator</h1>
+                  <p className="text-sm text-emerald-200 hidden sm:block">Create stunning visuals with AI</p>
                 </div>
               </div>
               <button
                 onClick={() => setShowAuthModal(true)}
-                className="px-6 py-3 rounded-2xl bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 text-white font-semibold hover:shadow-2xl hover:shadow-purple-500/25 transition-all duration-300 transform hover:scale-105 border border-white/20"
+                className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 text-white font-semibold hover:from-emerald-600 hover:to-teal-700 transition-all duration-300 transform hover:scale-105 shadow-lg"
               >
-                <User className="w-4 h-4 mr-2 inline" />
                 Sign In
               </button>
             </div>
           </div>
         </header>
 
-        {/* Hero Section */}
-        <main className="relative z-10 flex-1 flex items-center justify-center px-4 sm:px-6 py-20">
-          <div className="text-center max-w-6xl mx-auto">
-            {/* Main Icon with Animation */}
-            <div className="relative mb-12">
-              <div className="flex items-center justify-center w-32 h-32 rounded-3xl bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 mx-auto shadow-2xl shadow-purple-500/25 animate-pulse">
-                <Sparkles className="w-16 h-16 text-white" />
+        {/* Hero Section - Perfectly Centered */}
+        <main className="flex-1 flex items-center justify-center relative z-10 px-4 sm:px-6">
+          <div className="text-center max-w-5xl mx-auto">
+            {/* Main Icon with Animated Elements */}
+            <div className="relative flex items-center justify-center w-32 h-32 mx-auto mb-8">
+              {/* Main Icon */}
+              <div className="relative w-24 h-24 rounded-3xl bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 flex items-center justify-center shadow-2xl">
+                <Brain className="w-12 h-12 text-white" />
               </div>
+              
               {/* Floating Elements Around Icon */}
-              <div className="absolute -top-4 -left-4 w-8 h-8 bg-blue-400 rounded-full opacity-60 animate-bounce"></div>
-              <div className="absolute -top-2 -right-6 w-6 h-6 bg-purple-400 rounded-full opacity-60 animate-bounce delay-300"></div>
-              <div className="absolute -bottom-4 -left-6 w-10 h-10 bg-pink-400 rounded-full opacity-60 animate-bounce delay-700"></div>
-              <div className="absolute -bottom-2 -right-4 w-7 h-7 bg-cyan-400 rounded-full opacity-60 animate-bounce delay-1000"></div>
+              <div className="absolute -top-2 -right-2 w-6 h-6 bg-gradient-to-r from-amber-400 to-orange-500 rounded-full animate-bounce delay-300">
+                <Cpu className="w-4 h-4 text-white m-1" />
+              </div>
+              <div className="absolute -bottom-2 -left-2 w-6 h-6 bg-gradient-to-r from-violet-400 to-purple-500 rounded-full animate-bounce delay-700">
+                <Palette className="w-4 h-4 text-white m-1" />
+              </div>
+              <div className="absolute -top-2 -left-2 w-6 h-6 bg-gradient-to-r from-rose-400 to-pink-500 rounded-full animate-bounce delay-1000">
+                <Layers className="w-4 h-4 text-white m-1" />
+              </div>
+              <div className="absolute -bottom-2 -right-2 w-6 h-6 bg-gradient-to-r from-blue-400 to-indigo-500 rounded-full animate-bounce delay-1500">
+                <Sparkles className="w-4 h-4 text-white m-1" />
+              </div>
             </div>
             
-            {/* Main Heading with Gradient Text */}
-            <h1 className="text-6xl sm:text-8xl font-black mb-8 leading-tight">
-              <span className="bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
+            {/* Main Heading with Better Colors */}
+            <h1 className="text-5xl sm:text-7xl font-bold mb-6 leading-tight">
+              <span className="bg-gradient-to-r from-emerald-400 via-teal-400 to-cyan-400 bg-clip-text text-transparent">
                 AI Image
               </span>
               <br />
-              <span className="bg-gradient-to-r from-pink-400 via-purple-400 to-blue-400 bg-clip-text text-transparent">
+              <span className="bg-gradient-to-r from-amber-400 via-orange-400 to-rose-400 bg-clip-text text-transparent">
                 Generator
               </span>
             </h1>
             
-            {/* Subtitle with Typewriter Effect */}
-            <p className="text-2xl sm:text-3xl text-white/90 mb-12 max-w-4xl mx-auto leading-relaxed font-light">
-              Transform your ideas into stunning visuals with the power of 
-              <span className="bg-gradient-to-r from-cyan-400 to-blue-400 bg-clip-text text-transparent font-semibold"> Artificial Intelligence</span>
+            {/* Subtitle */}
+            <p className="text-xl sm:text-2xl text-slate-300 mb-8 max-w-4xl mx-auto leading-relaxed">
+              Create stunning blog featured images and infographics with the power of AI
             </p>
             
-            {/* Feature Pills with Icons */}
-            <div className="flex flex-wrap justify-center items-center gap-6 mb-16">
-              <div className="flex items-center px-6 py-3 bg-white/10 backdrop-blur-sm rounded-2xl border border-white/20 text-white shadow-lg">
-                <Brain className="w-5 h-5 mr-3 text-blue-400" />
-                <span className="font-medium">Neural Networks</span>
+            {/* Feature Pills */}
+            <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-12">
+              <div className="flex items-center px-4 py-2 bg-slate-800/50 backdrop-blur-sm rounded-full border border-slate-600/50 text-slate-200">
+                <Zap className="w-5 h-5 mr-2 text-emerald-400" />
+                Powered by{' '}
+                <a 
+                  href="https://seoengine.agency/" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="ml-1 font-semibold text-emerald-300 hover:text-emerald-200 transition-colors"
+                >
+                  SEO Engine
+                </a>
               </div>
-              <div className="flex items-center px-6 py-3 bg-white/10 backdrop-blur-sm rounded-2xl border border-white/20 text-white shadow-lg">
-                <Palette className="w-5 h-5 mr-3 text-purple-400" />
-                <span className="font-medium">Creative AI</span>
+              <div className="hidden sm:block w-2 h-2 bg-slate-500 rounded-full"></div>
+              <div className="flex items-center px-4 py-2 bg-slate-800/50 backdrop-blur-sm rounded-full border border-slate-600/50 text-slate-200">
+                <Brain className="w-5 h-5 mr-2 text-violet-400" />
+                Neural Networks
               </div>
-              <div className="flex items-center px-6 py-3 bg-white/10 backdrop-blur-sm rounded-2xl border border-white/20 text-white shadow-lg">
-                <Zap className="w-5 h-5 mr-3 text-yellow-400" />
-                <span className="font-medium">Lightning Fast</span>
-              </div>
-              <div className="flex items-center px-6 py-3 bg-white/10 backdrop-blur-sm rounded-2xl border border-white/20 text-white shadow-lg">
-                <Star className="w-5 h-5 mr-3 text-pink-400" />
-                <span className="font-medium">Professional Quality</span>
-              </div>
-            </div>
-
-            {/* Stats Section */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-8 mb-16 max-w-4xl mx-auto">
-              <div className="text-center">
-                <div className="text-4xl font-bold bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent mb-2">10K+</div>
-                <div className="text-white/70">Images Generated</div>
-              </div>
-              <div className="text-center">
-                <div className="text-4xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent mb-2">99.9%</div>
-                <div className="text-white/70">Uptime</div>
-              </div>
-              <div className="text-center">
-                <div className="text-4xl font-bold bg-gradient-to-r from-green-400 to-blue-400 bg-clip-text text-transparent mb-2">30s</div>
-                <div className="text-white/70">Average Generation</div>
+              <div className="hidden sm:block w-2 h-2 bg-slate-500 rounded-full"></div>
+              <div className="flex items-center px-4 py-2 bg-slate-800/50 backdrop-blur-sm rounded-full border border-slate-600/50 text-slate-200">
+                <CreditCard className="w-5 h-5 mr-2 text-amber-400" />
+                {isSupabaseConfigured ? '100 Free Credits' : 'Free to Use'}
               </div>
             </div>
             
-            {/* CTA Buttons */}
-            <div className="flex flex-col sm:flex-row gap-6 justify-center items-center">
-              <button
-                onClick={() => setShowSignUpModal(true)}
-                className="group px-12 py-5 rounded-2xl bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 text-white font-bold text-lg hover:shadow-2xl hover:shadow-purple-500/25 transition-all duration-300 transform hover:scale-105 border border-white/20 relative overflow-hidden"
-              >
-                <div className="absolute inset-0 bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-                <div className="relative flex items-center">
-                  <Wand2 className="w-6 h-6 mr-3" />
-                  Start Creating Free
-                  <ArrowRight className="w-5 h-5 ml-3 group-hover:translate-x-1 transition-transform duration-300" />
-                </div>
-              </button>
-              
-              <button
-                onClick={() => setShowAuthModal(true)}
-                className="px-12 py-5 rounded-2xl bg-white/10 backdrop-blur-sm text-white font-semibold text-lg hover:bg-white/20 transition-all duration-300 border border-white/20 flex items-center"
-              >
-                <User className="w-5 h-5 mr-3" />
-                Sign In
-              </button>
-            </div>
-
-            {/* Credit Info */}
-            <div className="mt-12 flex items-center justify-center">
-              <div className="flex items-center px-6 py-3 bg-green-500/20 backdrop-blur-sm rounded-2xl border border-green-400/30 text-green-300">
-                <CreditCard className="w-5 h-5 mr-3" />
-                <span className="font-medium">
-                  {isSupabaseConfigured ? '100 Free Credits on Sign Up' : 'Free to Use - No Registration Required'}
-                </span>
+            {/* Stats Section */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-12 max-w-2xl mx-auto">
+              <div className="text-center">
+                <div className="text-3xl font-bold text-emerald-400 mb-1">10K+</div>
+                <div className="text-sm text-slate-400">Images Generated</div>
+              </div>
+              <div className="text-center">
+                <div className="text-3xl font-bold text-amber-400 mb-1">99.9%</div>
+                <div className="text-sm text-slate-400">Uptime</div>
+              </div>
+              <div className="text-center">
+                <div className="text-3xl font-bold text-violet-400 mb-1">30s</div>
+                <div className="text-sm text-slate-400">Avg Generation</div>
               </div>
             </div>
+            
+            {/* CTA Button */}
+            <button
+              onClick={() => setShowAuthModal(true)}
+              className="px-10 py-4 rounded-xl bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 text-white font-bold hover:from-emerald-600 hover:via-teal-600 hover:to-cyan-600 transition-all duration-300 transform hover:scale-105 shadow-2xl text-lg border border-emerald-400/20"
+            >
+              Start Creating Free
+            </button>
           </div>
         </main>
-
-        {/* Features Section */}
-        <section className="relative z-10 py-20 bg-black/20 backdrop-blur-sm border-t border-white/10">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6">
-            <div className="text-center mb-16">
-              <h2 className="text-4xl font-bold bg-gradient-to-r from-white to-blue-200 bg-clip-text text-transparent mb-4">
-                Powered by Advanced AI
-              </h2>
-              <p className="text-xl text-white/70 max-w-3xl mx-auto">
-                Our cutting-edge neural networks understand your vision and create stunning visuals that exceed expectations
-              </p>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-              <div className="text-center p-6 bg-white/5 backdrop-blur-sm rounded-2xl border border-white/10 hover:bg-white/10 transition-all duration-300">
-                <div className="w-16 h-16 bg-gradient-to-r from-blue-500 to-cyan-500 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                  <ImageIcon className="w-8 h-8 text-white" />
-                </div>
-                <h3 className="text-xl font-semibold text-white mb-2">Blog Images</h3>
-                <p className="text-white/70">Create engaging featured images for your blog posts</p>
-              </div>
-
-              <div className="text-center p-6 bg-white/5 backdrop-blur-sm rounded-2xl border border-white/10 hover:bg-white/10 transition-all duration-300">
-                <div className="w-16 h-16 bg-gradient-to-r from-purple-500 to-pink-500 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                  <Layers className="w-8 h-8 text-white" />
-                </div>
-                <h3 className="text-xl font-semibold text-white mb-2">Infographics</h3>
-                <p className="text-white/70">Transform data into beautiful visual stories</p>
-              </div>
-
-              <div className="text-center p-6 bg-white/5 backdrop-blur-sm rounded-2xl border border-white/10 hover:bg-white/10 transition-all duration-300">
-                <div className="w-16 h-16 bg-gradient-to-r from-green-500 to-blue-500 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                  <Cpu className="w-8 h-8 text-white" />
-                </div>
-                <h3 className="text-xl font-semibold text-white mb-2">AI Powered</h3>
-                <p className="text-white/70">Advanced machine learning for perfect results</p>
-              </div>
-
-              <div className="text-center p-6 bg-white/5 backdrop-blur-sm rounded-2xl border border-white/10 hover:bg-white/10 transition-all duration-300">
-                <div className="w-16 h-16 bg-gradient-to-r from-yellow-500 to-orange-500 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                  <Zap className="w-8 h-8 text-white" />
-                </div>
-                <h3 className="text-xl font-semibold text-white mb-2">Instant Results</h3>
-                <p className="text-white/70">Generate professional images in seconds</p>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* Footer */}
-        <footer className="relative z-10 bg-black/30 backdrop-blur-sm border-t border-white/10 py-12">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 text-center">
-            <div className="flex items-center justify-center mb-6">
-              <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-gradient-to-r from-blue-500 to-purple-500 mr-3">
-                <Sparkles className="w-5 h-5 text-white" />
-              </div>
-              <a 
-                href="https://seoengine.agency/" 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent hover:from-blue-300 hover:to-purple-300 transition-all duration-300"
-              >
-                SEO Engine
-              </a>
-            </div>
-            <p className="text-white/70 mb-4">
-              Empowering creators with AI-driven visual solutions
-            </p>
-            <p className="text-sm text-white/50">
-              © 2025{' '}
-              <a 
-                href="https://seoengine.agency/" 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="text-blue-400 hover:text-blue-300 transition-colors"
-              >
-                SEO Engine
-              </a>
-              . All rights reserved. | Transforming imagination into reality.
-            </p>
-          </div>
-        </footer>
 
         <AuthModal
           isOpen={showAuthModal}
