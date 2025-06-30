@@ -59,6 +59,8 @@ export const signUp = async (userData: {
   const client = ensureSupabaseConfigured();
   
   try {
+    console.log('Starting sign up process for:', userData.email);
+    
     // First create the auth user
     const { data: authData, error: authError } = await client.auth.signUp({
       email: userData.email,
@@ -66,6 +68,7 @@ export const signUp = async (userData: {
     });
 
     if (authError) {
+      console.error('Auth sign up error:', authError);
       if (authError.message.includes('already registered')) {
         throw new Error('Email already registered. Please use a different email or sign in.');
       }
@@ -76,23 +79,35 @@ export const signUp = async (userData: {
       throw new Error('Failed to create user account');
     }
 
-    // Create user profile
-    const { data: profileData, error: profileError } = await client
+    console.log('Auth user created successfully:', authData.user.id);
+
+    // Create user profile in our users table
+    const profileData = {
+      id: authData.user.id,
+      email: userData.email,
+      name: userData.name,
+      brand_name: userData.brand_name || null,
+      website_url: userData.website_url || null,
+      username: userData.username,
+    };
+
+    console.log('Creating user profile:', profileData);
+
+    const { data: insertedProfile, error: profileError } = await client
       .from('users')
-      .insert({
-        id: authData.user.id,
-        email: userData.email,
-        name: userData.name,
-        brand_name: userData.brand_name,
-        website_url: userData.website_url,
-        username: userData.username,
-      })
+      .insert(profileData)
       .select()
       .single();
 
     if (profileError) {
+      console.error('Profile creation error:', profileError);
+      
       // Clean up auth user if profile creation fails
-      await client.auth.signOut();
+      try {
+        await client.auth.signOut();
+      } catch (cleanupError) {
+        console.error('Cleanup error:', cleanupError);
+      }
       
       if (profileError.code === '23505') {
         // Unique constraint violation
@@ -102,10 +117,11 @@ export const signUp = async (userData: {
           throw new Error('Email already registered. Please use a different email or sign in.');
         }
       }
-      throw new Error('Failed to create user profile. Please try again.');
+      throw new Error(`Failed to create user profile: ${profileError.message}`);
     }
 
-    return { user: profileData, authUser: authData.user };
+    console.log('User profile created successfully:', insertedProfile);
+    return { user: insertedProfile, authUser: authData.user };
   } catch (error) {
     console.error('Sign up error:', error);
     throw error;
@@ -116,14 +132,20 @@ export const signIn = async (email: string, password: string) => {
   const client = ensureSupabaseConfigured();
   
   try {
+    console.log('Attempting sign in for:', email);
+    
     const { data: authData, error: authError } = await client.auth.signInWithPassword({
       email,
       password,
     });
 
     if (authError) {
+      console.error('Auth sign in error:', authError);
       if (authError.message.includes('Invalid login credentials')) {
         throw new Error('Invalid email or password. Please check your credentials and try again.');
+      }
+      if (authError.message.includes('Email not confirmed')) {
+        throw new Error('Please check your email and click the confirmation link to activate your account before signing in.');
       }
       throw authError;
     }
@@ -131,6 +153,8 @@ export const signIn = async (email: string, password: string) => {
     if (!authData.user) {
       throw new Error('Failed to sign in');
     }
+
+    console.log('Auth sign in successful, fetching profile for:', authData.user.id);
 
     // Get user profile
     const { data: profileData, error: profileError } = await client
@@ -145,10 +169,43 @@ export const signIn = async (email: string, password: string) => {
     }
 
     if (!profileData) {
-      await client.auth.signOut();
-      throw new Error('User profile not found. Please contact support.');
+      console.error('No profile found for user:', authData.user.id);
+      
+      // Check if this is an existing auth user without a profile
+      // This can happen if the user was created before the profile system was set up
+      console.log('Creating missing profile for existing user');
+      
+      // Try to create a profile for this existing user
+      try {
+        const newProfileData = {
+          id: authData.user.id,
+          email: authData.user.email!,
+          name: authData.user.user_metadata?.name || authData.user.email!.split('@')[0],
+          username: authData.user.email!.split('@')[0].replace(/[^a-z0-9_]/g, '') + '_' + Date.now().toString().slice(-4),
+        };
+
+        const { data: createdProfile, error: createError } = await client
+          .from('users')
+          .insert(newProfileData)
+          .select()
+          .single();
+
+        if (createError) {
+          console.error('Failed to create missing profile:', createError);
+          await client.auth.signOut();
+          throw new Error('User profile not found and could not be created. Please contact support.');
+        }
+
+        console.log('Created missing profile:', createdProfile);
+        return { user: createdProfile, authUser: authData.user };
+      } catch (createProfileError) {
+        console.error('Error creating missing profile:', createProfileError);
+        await client.auth.signOut();
+        throw new Error('User profile not found. Please contact support or try creating a new account.');
+      }
     }
 
+    console.log('Sign in successful with profile:', profileData.email);
     return { user: profileData, authUser: authData.user };
   } catch (error) {
     console.error('Sign in error:', error);
@@ -192,6 +249,8 @@ export const getCurrentUser = async () => {
       return null;
     }
 
+    console.log('Found authenticated user, fetching profile:', authUser.id);
+
     // Get user profile
     const { data: profileData, error: profileError } = await supabase
       .from('users')
@@ -205,11 +264,41 @@ export const getCurrentUser = async () => {
     }
 
     if (!profileData) {
-      console.warn('No profile found for authenticated user, signing out');
-      await supabase.auth.signOut();
-      return null;
+      console.warn('No profile found for authenticated user:', authUser.id);
+      
+      // Try to create a profile for this existing user
+      try {
+        console.log('Attempting to create missing profile for existing auth user');
+        
+        const newProfileData = {
+          id: authUser.id,
+          email: authUser.email!,
+          name: authUser.user_metadata?.name || authUser.email!.split('@')[0],
+          username: authUser.email!.split('@')[0].replace(/[^a-z0-9_]/g, '') + '_' + Date.now().toString().slice(-4),
+        };
+
+        const { data: createdProfile, error: createError } = await supabase
+          .from('users')
+          .insert(newProfileData)
+          .select()
+          .single();
+
+        if (createError) {
+          console.error('Failed to create missing profile:', createError);
+          await supabase.auth.signOut();
+          return null;
+        }
+
+        console.log('Successfully created missing profile:', createdProfile);
+        return { user: createdProfile, authUser };
+      } catch (createProfileError) {
+        console.error('Error creating missing profile:', createProfileError);
+        await supabase.auth.signOut();
+        return null;
+      }
     }
 
+    console.log('Successfully retrieved user profile:', profileData.email);
     return { user: profileData, authUser };
   } catch (error) {
     console.error('Get current user error:', error);
