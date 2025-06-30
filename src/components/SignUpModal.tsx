@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, User, Building, Globe, Car as IdCard, Lock, Eye, EyeOff, Sparkles } from 'lucide-react';
+import { X, User, Building, Globe, AtSign, Lock, Eye, EyeOff, Sparkles } from 'lucide-react';
 
 interface SignUpModalProps {
   isOpen: boolean;
@@ -9,7 +9,7 @@ interface SignUpModalProps {
     name: string;
     brand_name?: string;
     website_url?: string;
-    user_id: string;
+    username: string;
     password: string;
   }) => Promise<boolean>;
 }
@@ -24,7 +24,7 @@ export const SignUpModal: React.FC<SignUpModalProps> = ({
     name: '',
     brand_name: '',
     website_url: '',
-    user_id: '',
+    username: '',
     password: '',
     confirmPassword: '',
   });
@@ -53,13 +53,19 @@ export const SignUpModal: React.FC<SignUpModalProps> = ({
       return;
     }
 
+    if (formData.username.length < 3) {
+      setError('Username must be at least 3 characters long');
+      setIsLoading(false);
+      return;
+    }
+
     try {
       const success = await onSignUp({
         email: formData.email,
         name: formData.name,
         brand_name: formData.brand_name || undefined,
         website_url: formData.website_url || undefined,
-        user_id: formData.user_id,
+        username: formData.username,
         password: formData.password,
       });
 
@@ -70,7 +76,7 @@ export const SignUpModal: React.FC<SignUpModalProps> = ({
           name: '',
           brand_name: '',
           website_url: '',
-          user_id: '',
+          username: '',
           password: '',
           confirmPassword: '',
         });
@@ -189,24 +195,31 @@ export const SignUpModal: React.FC<SignUpModalProps> = ({
               </div>
             </div>
 
-            {/* User ID */}
+            {/* Username */}
             <div>
-              <label htmlFor="user_id" className="block text-sm font-semibold text-gray-900 mb-2">
-                User ID *
+              <label htmlFor="username" className="block text-sm font-semibold text-gray-900 mb-2">
+                Username *
               </label>
               <div className="relative">
-                <IdCard className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                <AtSign className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
                 <input
                   type="text"
-                  id="user_id"
-                  value={formData.user_id}
-                  onChange={(e) => handleInputChange('user_id', e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''))}
+                  id="username"
+                  value={formData.username}
+                  onChange={(e) => handleInputChange('username', e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''))}
                   className="w-full pl-12 pr-4 py-3 rounded-xl bg-gray-50 border border-gray-200 text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300"
-                  placeholder="unique_user_id"
+                  placeholder="unique_username"
                   required
                 />
               </div>
-              <p className="text-xs text-gray-500 mt-1">Only lowercase letters, numbers, and underscores allowed</p>
+              <div className="mt-2 space-y-1">
+                <p className="text-xs text-gray-500">Only lowercase letters, numbers, and underscores allowed</p>
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                  <p className="text-xs text-amber-700 font-medium">
+                    ⚠️ Important: Your username must be unique across all users. If someone else has already chosen this username, account creation will fail.
+                  </p>
+                </div>
+              </div>
             </div>
 
             {/* Password */}
