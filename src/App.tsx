@@ -125,12 +125,20 @@ function App() {
     setFormData(data);
     setError(null);
     
-    // Set a timeout to prevent infinite loading
-    const timeoutId = setTimeout(() => {
-      console.error('Request timeout after 2 minutes');
-      setError('Request timed out. Please try again.');
+    // Create abort controller for the request
+    const controller = new AbortController();
+    
+    // Set multiple timeouts for better control
+    const requestTimeout = setTimeout(() => {
+      controller.abort();
+      console.error('Request aborted due to timeout');
+    }, 60000); // 60 seconds for the actual request
+    
+    const overallTimeout = setTimeout(() => {
+      console.error('Overall timeout after 90 seconds');
+      setError('Request timed out. The image generation service may be experiencing high load. Please try again in a few minutes.');
       setIsProcessing(false);
-    }, 120000); // 2 minutes timeout
+    }, 90000); // 90 seconds overall timeout
     
     try {
       console.log('=== STARTING IMAGE GENERATION ===');
@@ -167,21 +175,30 @@ function App() {
       console.log('Webhook URL:', WEBHOOK_URL);
       console.log('Payload:', JSON.stringify(payload, null, 2));
 
-      const controller = new AbortController();
-      const requestTimeoutId = setTimeout(() => {
-        controller.abort();
-      }, 90000); // 90 seconds for the actual request
+      // Test webhook connectivity first
+      try {
+        const testResponse = await fetch(WEBHOOK_URL, {
+          method: 'HEAD',
+          signal: AbortSignal.timeout(5000), // 5 second test
+        });
+        console.log('Webhook connectivity test:', testResponse.status);
+      } catch (testError) {
+        console.warn('Webhook connectivity test failed:', testError);
+        // Continue anyway, as HEAD might not be supported
+      }
 
       const response = await fetch(WEBHOOK_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Accept': 'application/json, text/plain, */*',
+          'User-Agent': 'SEO-Engine-Image-Generator/1.0',
         },
         body: JSON.stringify(payload),
         signal: controller.signal,
       });
 
-      clearTimeout(requestTimeoutId);
+      clearTimeout(requestTimeout);
 
       console.log('=== WEBHOOK RESPONSE ===');
       console.log('Response status:', response.status);
@@ -190,9 +207,23 @@ function App() {
       console.log('Response headers:', Object.fromEntries(response.headers.entries()));
 
       if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Error response body:', errorText);
-        throw new Error(`HTTP error! status: ${response.status} - ${response.statusText}. Response: ${errorText}`);
+        let errorText = '';
+        try {
+          errorText = await response.text();
+          console.error('Error response body:', errorText);
+        } catch (e) {
+          console.error('Could not read error response body');
+        }
+        
+        if (response.status === 404) {
+          throw new Error('Image generation service not found. Please contact support.');
+        } else if (response.status === 500) {
+          throw new Error('Image generation service is experiencing issues. Please try again later.');
+        } else if (response.status === 503) {
+          throw new Error('Image generation service is temporarily unavailable. Please try again in a few minutes.');
+        } else {
+          throw new Error(`Service error (${response.status}): ${response.statusText}. ${errorText ? `Details: ${errorText}` : ''}`);
+        }
       }
 
       // Get response as text first to debug
@@ -203,7 +234,7 @@ function App() {
       console.log('Last 100 chars:', responseText.substring(Math.max(0, responseText.length - 100)));
 
       if (!responseText || responseText.trim() === '') {
-        throw new Error('Empty response received from server. The image generation service may be temporarily unavailable.');
+        throw new Error('Empty response received from image generation service. Please try again.');
       }
 
       let result;
@@ -223,7 +254,7 @@ function App() {
           console.log('Response appears to be base64 string');
           result = { image: responseText.trim() };
         } else {
-          throw new Error(`Invalid response format. Expected JSON or base64 but got: ${responseText.substring(0, 200)}...`);
+          throw new Error(`Invalid response format from image generation service. Expected JSON or base64 image data. Response: ${responseText.substring(0, 200)}...`);
         }
       }
 
@@ -380,17 +411,19 @@ function App() {
       
       if (error instanceof Error) {
         if (error.name === 'AbortError') {
-          errorMessage = 'Request timed out. The image generation is taking longer than expected. Please try again.';
+          errorMessage = 'Request timed out. The image generation is taking longer than expected. Please try again in a few minutes.';
         } else if (error.message.includes('JSON')) {
           errorMessage = 'Invalid response format from server. Please contact support if this persists.';
-        } else if (error.message.includes('HTTP error')) {
-          errorMessage = `Server error: ${error.message}`;
+        } else if (error.message.includes('HTTP error') || error.message.includes('Service error')) {
+          errorMessage = error.message;
         } else if (error.message.includes('Empty response')) {
           errorMessage = 'No response received from server. The service may be temporarily unavailable. Please try again.';
         } else if (error.message.includes('base64')) {
           errorMessage = 'Invalid image data received. Please try again.';
         } else if (error.message.includes('timeout') || error.message.includes('timed out')) {
           errorMessage = 'Request timed out. Please try again with a shorter description or try again later.';
+        } else if (error.message.includes('fetch')) {
+          errorMessage = 'Network error. Please check your internet connection and try again.';
         } else {
           errorMessage = error.message;
         }
@@ -398,7 +431,8 @@ function App() {
       
       setError(errorMessage);
     } finally {
-      clearTimeout(timeoutId);
+      clearTimeout(requestTimeout);
+      clearTimeout(overallTimeout);
       setIsProcessing(false);
       console.log('=== PROCESSING COMPLETED ===');
     }
@@ -753,7 +787,32 @@ function App() {
       {error && (
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4">
           <div className="bg-red-50 border border-red-200 rounded-xl p-4">
-            <p className="text-red-600 text-sm">{error}</p>
+            <div className="flex items-start">
+              <AlertCircle className="w-5 h-5 text-red-600 mr-3 mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="text-red-600 text-sm font-medium mb-1">Image Generation Failed</p>
+                <p className="text-red-600 text-sm">{error}</p>
+                <div className="mt-3 flex items-center space-x-3">
+                  <button
+                    onClick={() => setError(null)}
+                    className="text-sm text-red-600 hover:text-red-700 font-medium"
+                  >
+                    Dismiss
+                  </button>
+                  <button
+                    onClick={() => {
+                      setError(null);
+                      if (formData) {
+                        handleFormSubmit(formData);
+                      }
+                    }}
+                    className="text-sm bg-red-600 text-white px-3 py-1 rounded hover:bg-red-700 transition-colors"
+                  >
+                    Try Again
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}
