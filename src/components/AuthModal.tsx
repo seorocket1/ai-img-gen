@@ -4,7 +4,7 @@ import { X, Mail, UserCheck, Sparkles, Eye, EyeOff, UserPlus } from 'lucide-reac
 interface AuthModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSignInWithEmail: (email: string, password: string) => Promise<boolean>;
+  onSignInWithEmail: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   onSignInAnonymously: () => Promise<boolean>;
   onOpenSignUp: () => void;
 }
@@ -29,13 +29,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     setIsLoading(true);
     setError('');
 
-    const success = await onSignInWithEmail(email, password);
-    if (success) {
+    const result = await onSignInWithEmail(email, password);
+    if (result.success) {
       onClose();
       setEmail('');
       setPassword('');
     } else {
-      setError('Invalid credentials. Please try again.');
+      setError(result.error || 'Failed to sign in. Please try again.');
     }
     setIsLoading(false);
   };

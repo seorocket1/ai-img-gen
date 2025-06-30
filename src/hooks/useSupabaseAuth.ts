@@ -152,7 +152,7 @@ export const useSupabaseAuth = () => {
     }
   };
 
-  const handleSignIn = async (email: string, password: string): Promise<boolean> => {
+  const handleSignIn = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
     if (!isSupabaseConfigured) {
       throw new Error('Database connection not configured');
     }
@@ -168,15 +168,29 @@ export const useSupabaseAuth = () => {
         isLoading: false,
         isAuthenticated: true,
       });
-      return true;
+      return { success: true };
     } catch (error) {
       console.error('Sign in error:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Failed to sign in';
+      
+      let errorMessage = 'Failed to sign in';
+      
+      // Check for specific error messages
+      if (error instanceof Error) {
+        if (error.message.includes('Email not confirmed')) {
+          errorMessage = 'Please check your email and click the confirmation link to activate your account before signing in.';
+        } else if (error.message.includes('Invalid login credentials')) {
+          errorMessage = 'Invalid email or password. Please check your credentials and try again.';
+        } else {
+          errorMessage = error.message;
+        }
+      }
+      
       setAuthState(prev => ({
         ...prev,
         error: errorMessage,
       }));
-      return false;
+      
+      return { success: false, error: errorMessage };
     }
   };
 
