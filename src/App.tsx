@@ -161,14 +161,57 @@ function App() {
         body: JSON.stringify(payload),
       });
 
+      console.log('Response status:', response.status);
+      console.log('Response headers:', response.headers);
+
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      const result = await response.json();
-      console.log('Webhook response:', result);
+      // Get response as text first to debug
+      const responseText = await response.text();
+      console.log('Raw response:', responseText);
 
+      let result;
+      try {
+        result = JSON.parse(responseText);
+      } catch (parseError) {
+        console.error('JSON parse error:', parseError);
+        console.log('Response was not valid JSON:', responseText);
+        throw new Error('Invalid response format from server');
+      }
+
+      console.log('Parsed webhook response:', result);
+
+      // Check for different possible response formats
+      let imageBase64 = null;
+      
+      // Try different possible property names for the image data
       if (result.image) {
+        imageBase64 = result.image;
+      } else if (result.data && result.data.image) {
+        imageBase64 = result.data.image;
+      } else if (result.base64) {
+        imageBase64 = result.base64;
+      } else if (result.imageData) {
+        imageBase64 = result.imageData;
+      } else if (result.image_data) {
+        imageBase64 = result.image_data;
+      } else if (typeof result === 'string') {
+        // Sometimes the response might be just the base64 string
+        imageBase64 = result;
+      }
+
+      console.log('Extracted image base64:', imageBase64 ? 'Found' : 'Not found');
+
+      if (imageBase64) {
+        // Clean the base64 string (remove data URL prefix if present)
+        if (imageBase64.startsWith('data:image/')) {
+          imageBase64 = imageBase64.split(',')[1];
+        }
+
+        console.log('Processing image with base64 length:', imageBase64.length);
+
         // Deduct credits for authenticated users (only if Supabase is configured)
         if (user && isAuthenticated && isSupabaseConfigured) {
           try {
@@ -193,7 +236,7 @@ function App() {
               style: sanitizedData.style,
               colour: sanitizedData.colour,
               credits_used: CREDIT_COSTS[selectedType],
-              image_data: result.image,
+              image_data: imageBase64,
             });
           } catch (dbError) {
             console.error('Error saving to database:', dbError);
@@ -202,7 +245,7 @@ function App() {
         }
 
         const newImage = {
-          base64: result.image,
+          base64: imageBase64,
           type: selectedType as 'blog' | 'infographic',
         };
         
@@ -213,7 +256,7 @@ function App() {
         const historyImage = {
           id: `img-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
           type: selectedType as 'blog' | 'infographic',
-          base64: result.image,
+          base64: imageBase64,
           title: selectedType === 'blog' ? sanitizedData.title : 'Infographic',
           content: selectedType === 'blog' ? sanitizedData.intro : sanitizedData.content,
           timestamp: Date.now(),
@@ -229,7 +272,8 @@ function App() {
         // Show success notification
         setShowSuccessNotification(true);
       } else {
-        throw new Error('No image data received from the server');
+        console.error('No image data found in response:', result);
+        throw new Error('No image data received from the server. Please check the webhook response format.');
       }
     } catch (error) {
       console.error('Error generating image:', error);
@@ -237,7 +281,9 @@ function App() {
       
       if (error instanceof Error) {
         if (error.message.includes('JSON')) {
-          errorMessage = 'Invalid content format. Please check your input and try again.';
+          errorMessage = 'Invalid response format from server. Please contact support.';
+        } else if (error.message.includes('HTTP error')) {
+          errorMessage = 'Server error occurred. Please try again later.';
         } else {
           errorMessage = error.message;
         }
