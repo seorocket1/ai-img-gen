@@ -3,7 +3,7 @@ import { X, Upload, Download, AlertCircle, CheckCircle, Clock, Package, Plus, Tr
 import JSZip from 'jszip';
 import { sanitizeFormData, createSafeFilename } from '../utils/textSanitizer';
 import { HistoryImage } from '../types/history';
-import { User, deductCredits, saveImageGeneration } from '../lib/supabase';
+import { User, isSupabaseConfigured } from '../lib/supabase';
 
 interface BulkItem {
   id: string;
@@ -193,6 +193,11 @@ export const BulkProcessingModal: React.FC<BulkProcessingModalProps> = ({
 
   const processItem = async (item: BulkItem): Promise<BulkItem> => {
     try {
+      console.log('=== PROCESSING BULK ITEM ===');
+      console.log('Item ID:', item.id);
+      console.log('Item type:', item.type);
+      console.log('Item data:', item.data);
+
       // Simulate processing steps with delays and animations
       for (let i = 0; i < PROCESSING_STEPS.length; i++) {
         setItems(prevItems => 
@@ -233,6 +238,8 @@ export const BulkProcessingModal: React.FC<BulkProcessingModalProps> = ({
         image_detail: imageDetail,
       };
 
+      console.log('Sending bulk item to webhook:', payload);
+
       const response = await fetch(WEBHOOK_URL, {
         method: 'POST',
         headers: {
@@ -245,66 +252,137 @@ export const BulkProcessingModal: React.FC<BulkProcessingModalProps> = ({
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      const result = await response.json();
+      // Get response as text first to debug
+      const responseText = await response.text();
+      console.log('Bulk item response text length:', responseText.length);
 
-      if (result.image) {
-        // Deduct credits for authenticated users
-        if (user && !user.isAnonymous) {
-          try {
-            await deductCredits(user.id, CREDIT_COSTS[item.type]);
-            onRefreshUser?.(); // Refresh user data to update credits
-          } catch (creditError) {
-            console.error('Error deducting credits:', creditError);
-            // Continue with image generation even if credit deduction fails
-          }
-        }
-
-        // Save to database for authenticated users
-        if (user && !user.isAnonymous) {
-          try {
-            await saveImageGeneration({
-              user_id: user.id,
-              image_type: item.type,
-              title: item.type === 'blog' ? item.data.title : undefined,
-              content: item.type === 'blog' ? item.data.intro : item.data.content,
-              style: finalStyle,
-              colour: finalColour,
-              credits_used: CREDIT_COSTS[item.type],
-              image_data: result.image,
-            });
-          } catch (dbError) {
-            console.error('Error saving to database:', dbError);
-            // Continue with local storage even if database save fails
-          }
-        }
-
-        const completedItem = {
-          ...item,
-          status: 'completed' as const,
-          result: result.image,
-          processingStep: undefined,
-        };
-
-        // Add to history with proper structure
-        const historyImage: HistoryImage = {
-          id: `img-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-          type: item.type,
-          base64: result.image,
-          title: item.type === 'blog' ? item.data.title : 'Infographic',
-          content: item.type === 'blog' ? item.data.intro : item.data.content,
-          timestamp: Date.now(),
-          style: finalStyle,
-          colour: finalColour,
-        };
-
-        console.log('Adding bulk image to history:', historyImage);
-        onImageGenerated?.(historyImage);
-
-        return completedItem;
-      } else {
-        throw new Error('No image data received from the server');
+      if (!responseText || responseText.trim() === '') {
+        throw new Error('Empty response received from server');
       }
+
+      let result;
+      try {
+        result = JSON.parse(responseText);
+      } catch (parseError) {
+        // Check if the response looks like base64
+        const base64Regex = /^[A-Za-z0-9+/]*={0,2}$/;
+        if (responseText.length > 100 && base64Regex.test(responseText.trim())) {
+          result = { image: responseText.trim() };
+        } else {
+          throw new Error(`Invalid response format for bulk item`);
+        }
+      }
+
+      // Extract image data
+      let imageBase64 = null;
+      
+      if (result && typeof result === 'object') {
+        const possibleKeys = ['image', 'data', 'base64', 'imageData', 'image_data', 'output', 'result', 'response'];
+        
+        for (const key of possibleKeys) {
+          if (result[key]) {
+            imageBase64 = result[key];
+            break;
+          }
+          
+          if (result[key] && typeof result[key] === 'object' && result[key].image) {
+            imageBase64 = result[key].image;
+            break;
+          }
+        }
+        
+        if (!imageBase64) {
+          for (const [key, value] of Object.entries(result)) {
+            if (typeof value === 'string' && value.length > 100) {
+              const base64Regex = /^[A-Za-z0-9+/]*={0,2}$/;
+              if (base64Regex.test(value)) {
+                imageBase64 = value;
+                break;
+              }
+            }
+          }
+        }
+      } else if (typeof result === 'string' && result.length > 100) {
+        imageBase64 = result;
+      }
+
+      if (!imageBase64) {
+        throw new Error('No image data found in bulk response');
+      }
+
+      // Clean the base64 string
+      if (imageBase64.startsWith('data:image/')) {
+        imageBase64 = imageBase64.split(',')[1];
+      }
+
+      // Validate base64 string
+      if (imageBase64.length < 100) {
+        throw new Error('Received image data is too short to be valid');
+      }
+
+      try {
+        atob(imageBase64.substring(0, 100));
+      } catch (base64Error) {
+        throw new Error('Received data is not valid base64 format');
+      }
+
+      // Deduct credits for authenticated users (only if Supabase is configured)
+      if (user && isSupabaseConfigured) {
+        try {
+          console.log('Deducting credits for bulk item:', CREDIT_COSTS[item.type]);
+          const { deductCredits } = await import('../lib/supabase');
+          await deductCredits(user.id, CREDIT_COSTS[item.type]);
+          onRefreshUser?.();
+        } catch (creditError) {
+          console.error('Error deducting credits for bulk item:', creditError);
+        }
+      }
+
+      // Save to database for authenticated users (only if Supabase is configured)
+      if (user && isSupabaseConfigured) {
+        try {
+          console.log('Saving bulk image generation to database');
+          const { saveImageGeneration } = await import('../lib/supabase');
+          await saveImageGeneration({
+            user_id: user.id,
+            image_type: item.type,
+            title: item.type === 'blog' ? item.data.title : undefined,
+            content: item.type === 'blog' ? item.data.intro : item.data.content,
+            style: finalStyle,
+            colour: finalColour,
+            credits_used: CREDIT_COSTS[item.type],
+            image_data: imageBase64,
+          });
+        } catch (dbError) {
+          console.error('Error saving bulk item to database:', dbError);
+        }
+      }
+
+      const completedItem = {
+        ...item,
+        status: 'completed' as const,
+        result: imageBase64,
+        processingStep: undefined,
+      };
+
+      // Add to history with proper structure
+      const historyImage: HistoryImage = {
+        id: `img-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        type: item.type,
+        base64: imageBase64,
+        title: item.type === 'blog' ? item.data.title : 'Infographic',
+        content: item.type === 'blog' ? item.data.intro : item.data.content,
+        timestamp: Date.now(),
+        style: finalStyle,
+        colour: finalColour,
+      };
+
+      console.log('Adding bulk image to history:', historyImage.id);
+      onImageGenerated?.(historyImage);
+
+      return completedItem;
     } catch (error) {
+      console.error('Bulk item processing error:', error);
       return {
         ...item,
         status: 'error',
@@ -328,8 +406,8 @@ export const BulkProcessingModal: React.FC<BulkProcessingModalProps> = ({
       return;
     }
 
-    // Check if user has enough credits for all items
-    if (user && !user.isAnonymous) {
+    // Check if user has enough credits for all items (only if Supabase is configured)
+    if (user && isSupabaseConfigured) {
       const totalCreditsNeeded = validItems.length * CREDIT_COSTS[imageType];
       if (user.credits < totalCreditsNeeded) {
         alert(`Insufficient credits. You need ${totalCreditsNeeded} credits to process ${validItems.length} ${imageType} images. You currently have ${user.credits} credits.`);
@@ -486,9 +564,9 @@ export const BulkProcessingModal: React.FC<BulkProcessingModalProps> = ({
     }
   }).length;
 
-  // Calculate total credits needed
+  // Calculate total credits needed (only if Supabase is configured)
   const totalCreditsNeeded = validItemsCount * CREDIT_COSTS[imageType];
-  const hasEnoughCredits = !user || user.isAnonymous || user.credits >= totalCreditsNeeded;
+  const hasEnoughCredits = !user || !isSupabaseConfigured || user.credits >= totalCreditsNeeded;
 
   if (!isOpen) return null;
 
@@ -515,7 +593,7 @@ export const BulkProcessingModal: React.FC<BulkProcessingModalProps> = ({
                 </div>
               </div>
               {/* Credits Display */}
-              {user && !user.isAnonymous && (
+              {user && isSupabaseConfigured && (
                 <div className="text-right">
                   <div className="text-sm text-blue-100">Available Credits</div>
                   <div className="text-2xl font-bold">{user.credits}</div>
@@ -542,7 +620,7 @@ export const BulkProcessingModal: React.FC<BulkProcessingModalProps> = ({
           )}
 
           {/* Credit Warning */}
-          {user && !user.isAnonymous && !hasEnoughCredits && validItemsCount > 0 && (
+          {user && isSupabaseConfigured && !hasEnoughCredits && validItemsCount > 0 && (
             <div className="bg-red-50 border-b border-red-200 p-4 flex-shrink-0">
               <div className="flex items-center text-red-700">
                 <AlertCircle className="w-4 h-4 mr-3" />
@@ -602,9 +680,11 @@ export const BulkProcessingModal: React.FC<BulkProcessingModalProps> = ({
                             <span className="font-semibold text-gray-900">
                               {imageType === 'blog' ? 'Blog Post' : 'Infographic'} #{index + 1}
                             </span>
-                            <div className="text-xs text-gray-500 mt-1">
-                              Cost: {CREDIT_COSTS[imageType]} credits
-                            </div>
+                            {isSupabaseConfigured && (
+                              <div className="text-xs text-gray-500 mt-1">
+                                Cost: {CREDIT_COSTS[imageType]} credits
+                              </div>
+                            )}
                             {item.status === 'processing' && item.processingStep !== undefined && (
                               <div className={`mt-2 p-3 rounded-lg ${PROCESSING_STEPS[item.processingStep].bgColor} border border-opacity-20`}>
                                 <div className="flex items-center">
@@ -926,7 +1006,7 @@ export const BulkProcessingModal: React.FC<BulkProcessingModalProps> = ({
                   ) : (
                     <div className="flex items-center justify-center">
                       <Upload className="w-5 h-5 mr-2" />
-                      Process All Items ({validItemsCount}) - {totalCreditsNeeded} Credits
+                      Process All Items ({validItemsCount}){isSupabaseConfigured ? ` - ${totalCreditsNeeded} Credits` : ''}
                     </div>
                   )}
                 </button>
