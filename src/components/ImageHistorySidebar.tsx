@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { X, History, Download, Trash2, Image as ImageIcon, Eye } from 'lucide-react';
 import { useImageHistory } from '../hooks/useImageHistory';
 import { HistoryImage } from '../types/history';
@@ -12,7 +12,15 @@ export const ImageHistorySidebar: React.FC<ImageHistorySidebarProps> = ({
   isOpen,
   onClose,
 }) => {
-  const { history, clearHistory, removeImage } = useImageHistory();
+  const { history, clearHistory, removeImage, forceRefresh } = useImageHistory();
+
+  // Force refresh when sidebar opens to ensure latest data
+  useEffect(() => {
+    if (isOpen) {
+      console.log('History sidebar opened, forcing refresh');
+      forceRefresh();
+    }
+  }, [isOpen, forceRefresh]);
 
   const downloadImage = (image: HistoryImage) => {
     try {
@@ -82,12 +90,21 @@ export const ImageHistorySidebar: React.FC<ImageHistorySidebarProps> = ({
                 <p className="text-sm text-gray-600">{history.length} images generated</p>
               </div>
             </div>
-            <button
-              onClick={onClose}
-              className="p-2 text-gray-500 hover:bg-gray-100 rounded-full transition-colors"
-            >
-              <X className="w-5 h-5" />
-            </button>
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={forceRefresh}
+                className="p-2 text-gray-500 hover:bg-gray-100 rounded-full transition-colors"
+                title="Refresh History"
+              >
+                <Eye className="w-4 h-4" />
+              </button>
+              <button
+                onClick={onClose}
+                className="p-2 text-gray-500 hover:bg-gray-100 rounded-full transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
           </div>
 
           {/* History List */}

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { HistoryImage } from '../types/history';
 
 const STORAGE_KEY = 'seo_engine_image_history';
@@ -6,10 +6,13 @@ const MAX_HISTORY_ITEMS = 50;
 
 export const useImageHistory = () => {
   const [history, setHistory] = useState<HistoryImage[]>([]);
-  const [refreshTrigger, setRefreshTrigger] = useState(0);
 
-  // Load history from localStorage on mount and when refresh is triggered
+  // Load history from localStorage on mount
   useEffect(() => {
+    loadHistoryFromStorage();
+  }, []);
+
+  const loadHistoryFromStorage = useCallback(() => {
     try {
       const savedHistory = localStorage.getItem(STORAGE_KEY);
       console.log('Loading history from localStorage:', savedHistory);
@@ -42,21 +45,19 @@ export const useImageHistory = () => {
       // Clear corrupted data
       localStorage.removeItem(STORAGE_KEY);
     }
-  }, [refreshTrigger]);
+  }, []);
 
   // Save history to localStorage whenever it changes
-  useEffect(() => {
-    if (history.length > 0) {
-      try {
-        console.log('Saving history to localStorage:', history.length, 'items');
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(history));
-      } catch (error) {
-        console.error('Error saving image history:', error);
-      }
+  const saveHistoryToStorage = useCallback((historyData: HistoryImage[]) => {
+    try {
+      console.log('Saving history to localStorage:', historyData.length, 'items');
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(historyData));
+    } catch (error) {
+      console.error('Error saving image history:', error);
     }
-  }, [history]);
+  }, []);
 
-  const addToHistory = (image: HistoryImage) => {
+  const addToHistory = useCallback((image: HistoryImage) => {
     console.log('Adding to history:', {
       id: image.id,
       type: image.type,
@@ -83,39 +84,38 @@ export const useImageHistory = () => {
       // Keep only the most recent MAX_HISTORY_ITEMS
       const trimmed = updated.slice(0, MAX_HISTORY_ITEMS);
       console.log('Updated history length:', trimmed.length);
+      
+      // Save to localStorage immediately
+      saveHistoryToStorage(trimmed);
+      
       return trimmed;
     });
 
-    // Force a refresh to ensure UI updates
-    setTimeout(() => {
-      setRefreshTrigger(prev => prev + 1);
-    }, 100);
-
     return image;
-  };
+  }, [saveHistoryToStorage]);
 
-  const removeImage = (id: string) => {
+  const removeImage = useCallback((id: string) => {
     console.log('Removing image from history:', id);
     setHistory(prev => {
       const filtered = prev.filter(img => img.id !== id);
       console.log('History after removal:', filtered.length, 'items');
+      
+      // Save to localStorage immediately
+      saveHistoryToStorage(filtered);
+      
       return filtered;
     });
-  };
+  }, [saveHistoryToStorage]);
 
-  const clearHistory = () => {
+  const clearHistory = useCallback(() => {
     console.log('Clearing all history');
     setHistory([]);
     localStorage.removeItem(STORAGE_KEY);
-  };
+  }, []);
 
-  const getImageById = (id: string) => {
+  const getImageById = useCallback((id: string) => {
     return history.find(img => img.id === id);
-  };
-
-  const forceRefresh = () => {
-    setRefreshTrigger(prev => prev + 1);
-  };
+  }, [history]);
 
   // Debug log current state
   console.log('Current history state:', {
@@ -129,6 +129,6 @@ export const useImageHistory = () => {
     removeImage,
     clearHistory,
     getImageById,
-    forceRefresh,
+    forceRefresh: loadHistoryFromStorage,
   };
 };

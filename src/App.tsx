@@ -347,7 +347,7 @@ function App() {
       
       console.log('Adding image to history:', historyImage.id);
       
-      // Add to history immediately
+      // Add to history immediately - this will trigger real-time updates
       addToHistory(historyImage);
       
       // Show success notification
@@ -424,12 +424,6 @@ function App() {
     // Refresh user data to update credits
     if (user && isAuthenticated && isSupabaseConfigured) {
       refreshUser();
-    }
-    
-    // Force refresh history sidebar if it's open
-    if (showHistorySidebar) {
-      setShowHistorySidebar(false);
-      setTimeout(() => setShowHistorySidebar(true), 100);
     }
   };
 
