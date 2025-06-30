@@ -617,11 +617,7 @@ export const BulkProcessingModal: React.FC<BulkProcessingModalProps> = ({
   };
 
   const handleClose = () => {
-    // Always allow closing, but warn if processing
-    if (isProcessing) {
-      const confirmClose = confirm('Bulk processing is currently active. Are you sure you want to close? This will not stop the processing but you won\'t be able to monitor progress.');
-      if (!confirmClose) return;
-    }
+    // Simply close without any confirmation dialog to prevent browser notifications
     onClose();
   };
 
@@ -638,7 +634,7 @@ export const BulkProcessingModal: React.FC<BulkProcessingModalProps> = ({
           <button
             onClick={handleClose}
             className="absolute top-4 right-4 p-2 hover:bg-white/20 rounded-full transition-colors"
-            title={isProcessing ? "Processing is active - click to close anyway" : "Close"}
+            title="Close"
           >
             <X className="w-5 h-5" />
           </button>

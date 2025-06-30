@@ -70,97 +70,165 @@ export const ImagePreview: React.FC<ImagePreviewProps> = ({
     const currentLoadingStep = LOADING_STEPS[currentStep];
     const StepIcon = currentLoadingStep.icon;
     const progressPercentage = bulkProgress ? (bulkProgress.completed / bulkProgress.total) * 100 : 0;
+    
+    // Check if bulk processing is actually complete
+    const isBulkComplete = bulkProgress && bulkProgress.completed === bulkProgress.total && bulkProgress.total > 0;
 
     return (
       <div className="flex flex-col items-center justify-center h-full text-center p-6">
-        {/* Animated Loading Container */}
-        <div className={`relative mb-8 p-6 rounded-2xl ${currentLoadingStep.bgColor} border border-opacity-20 transition-all duration-1000`}>
-          <div className="relative">
-            {/* Pulsing Background Circle */}
-            <div className={`w-20 h-20 rounded-full ${currentLoadingStep.color.replace('text-', 'bg-')} opacity-20 animate-pulse absolute inset-0`}></div>
-            
-            {/* Main Icon */}
-            <div className="relative w-20 h-20 rounded-full bg-white shadow-lg flex items-center justify-center">
-              <Package className={`w-10 h-10 ${currentLoadingStep.color} animate-pulse`} />
-            </div>
-            
-            {/* Rotating Border */}
-            <div className="absolute inset-0 w-20 h-20 rounded-full border-4 border-transparent border-t-current animate-spin opacity-30" style={{ color: currentLoadingStep.color.replace('text-', '') }}></div>
-          </div>
-        </div>
-
-        {/* Bulk Processing Information */}
-        <div className="space-y-4 max-w-md">
-          <h3 className="text-2xl font-bold text-gray-900">Bulk Processing Active</h3>
-          
-          {/* Progress Display */}
-          {bulkProgress && (
-            <div className="bg-blue-50 p-4 rounded-xl border border-blue-200">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-semibold text-blue-700">Progress</span>
-                <span className="text-sm text-blue-600">
-                  {bulkProgress.completed}/{bulkProgress.total} completed
-                </span>
+        {/* Show completion state if bulk is done */}
+        {isBulkComplete ? (
+          <>
+            {/* Completion Animation */}
+            <div className="relative mb-8 p-6 rounded-2xl bg-green-50 border border-green-200">
+              <div className="relative">
+                <div className="w-20 h-20 rounded-full bg-green-100 flex items-center justify-center">
+                  <Package className="w-10 h-10 text-green-600" />
+                </div>
               </div>
-              <div className="w-full bg-blue-200 rounded-full h-3">
+            </div>
+
+            {/* Completion Information */}
+            <div className="space-y-4 max-w-md">
+              <h3 className="text-2xl font-bold text-gray-900">Bulk Processing Complete!</h3>
+              
+              {/* Final Results */}
+              <div className="bg-green-50 p-4 rounded-xl border border-green-200">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-semibold text-green-700">Final Results</span>
+                  <span className="text-sm text-green-600">
+                    {bulkProgress.completed}/{bulkProgress.total} completed
+                  </span>
+                </div>
+                <div className="w-full bg-green-200 rounded-full h-3">
+                  <div className="bg-green-600 h-3 rounded-full w-full" />
+                </div>
+                <p className="text-xs text-green-600 mt-2">100% complete</p>
+              </div>
+              
+              {/* Action Buttons */}
+              <div className="space-y-3">
+                {onOpenBulkModal && (
+                  <button
+                    onClick={onOpenBulkModal}
+                    className="w-full py-3 px-6 rounded-xl bg-gradient-to-r from-green-600 to-emerald-600 text-white font-semibold hover:from-green-700 hover:to-emerald-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition-all duration-300 transform hover:scale-[1.02] shadow-lg"
+                  >
+                    <div className="flex items-center justify-center">
+                      <Eye className="w-5 h-5 mr-2" />
+                      View & Download Results
+                    </div>
+                  </button>
+                )}
+                
+                <button
+                  onClick={onGenerateNew}
+                  className="w-full py-3 px-6 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold hover:from-blue-700 hover:to-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all duration-300 transform hover:scale-[1.02] shadow-lg"
+                >
+                  Generate New Images
+                </button>
+              </div>
+
+              {/* Additional Info */}
+              <div className="flex items-center justify-center text-sm text-gray-500 space-x-4">
+                <div className="flex items-center">
+                  <Sparkles className="w-4 h-4 mr-2" />
+                  All images saved to history
+                </div>
+              </div>
+            </div>
+          </>
+        ) : (
+          <>
+            {/* Processing Animation */}
+            <div className={`relative mb-8 p-6 rounded-2xl ${currentLoadingStep.bgColor} border border-opacity-20 transition-all duration-1000`}>
+              <div className="relative">
+                {/* Pulsing Background Circle */}
+                <div className={`w-20 h-20 rounded-full ${currentLoadingStep.color.replace('text-', 'bg-')} opacity-20 animate-pulse absolute inset-0`}></div>
+                
+                {/* Main Icon */}
+                <div className="relative w-20 h-20 rounded-full bg-white shadow-lg flex items-center justify-center">
+                  <Package className={`w-10 h-10 ${currentLoadingStep.color} animate-pulse`} />
+                </div>
+                
+                {/* Rotating Border */}
+                <div className="absolute inset-0 w-20 h-20 rounded-full border-4 border-transparent border-t-current animate-spin opacity-30" style={{ color: currentLoadingStep.color.replace('text-', '') }}></div>
+              </div>
+            </div>
+
+            {/* Bulk Processing Information */}
+            <div className="space-y-4 max-w-md">
+              <h3 className="text-2xl font-bold text-gray-900">Bulk Processing Active</h3>
+              
+              {/* Progress Display */}
+              {bulkProgress && (
+                <div className="bg-blue-50 p-4 rounded-xl border border-blue-200">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-semibold text-blue-700">Progress</span>
+                    <span className="text-sm text-blue-600">
+                      {bulkProgress.completed}/{bulkProgress.total} completed
+                    </span>
+                  </div>
+                  <div className="w-full bg-blue-200 rounded-full h-3">
+                    <div 
+                      className="bg-gradient-to-r from-blue-600 to-indigo-600 h-3 rounded-full transition-all duration-500"
+                      style={{ width: `${progressPercentage}%` }}
+                    />
+                  </div>
+                  <p className="text-xs text-blue-600 mt-2">
+                    {Math.round(progressPercentage)}% complete
+                  </p>
+                </div>
+              )}
+              
+              {/* Current Step Display */}
+              <div className={`p-4 rounded-xl ${currentLoadingStep.bgColor} border border-opacity-20`}>
+                <div className="flex items-center justify-center mb-2">
+                  <StepIcon className={`w-5 h-5 mr-3 ${currentLoadingStep.color} animate-pulse`} />
+                  <p className={`font-semibold ${currentLoadingStep.color}`}>
+                    Step {currentStep + 1} of {LOADING_STEPS.length}
+                  </p>
+                </div>
+                <p className="text-gray-700 font-medium animate-pulse">
+                  {currentLoadingStep.text}
+                </p>
+              </div>
+
+              {/* Progress Bar */}
+              <div className="w-full bg-gray-200 rounded-full h-2">
                 <div 
-                  className="bg-gradient-to-r from-blue-600 to-indigo-600 h-3 rounded-full transition-all duration-500"
-                  style={{ width: `${progressPercentage}%` }}
+                  className={`h-2 rounded-full transition-all duration-1000 ${currentLoadingStep.color.replace('text-', 'bg-')}`}
+                  style={{ width: `${((currentStep + 1) / LOADING_STEPS.length) * 100}%` }}
                 />
               </div>
-              <p className="text-xs text-blue-600 mt-2">
-                {Math.round(progressPercentage)}% complete
-              </p>
-            </div>
-          )}
-          
-          {/* Current Step Display */}
-          <div className={`p-4 rounded-xl ${currentLoadingStep.bgColor} border border-opacity-20`}>
-            <div className="flex items-center justify-center mb-2">
-              <StepIcon className={`w-5 h-5 mr-3 ${currentLoadingStep.color} animate-pulse`} />
-              <p className={`font-semibold ${currentLoadingStep.color}`}>
-                Step {currentStep + 1} of {LOADING_STEPS.length}
-              </p>
-            </div>
-            <p className="text-gray-700 font-medium animate-pulse">
-              {currentLoadingStep.text}
-            </p>
-          </div>
 
-          {/* Progress Bar */}
-          <div className="w-full bg-gray-200 rounded-full h-2">
-            <div 
-              className={`h-2 rounded-full transition-all duration-1000 ${currentLoadingStep.color.replace('text-', 'bg-')}`}
-              style={{ width: `${((currentStep + 1) / LOADING_STEPS.length) * 100}%` }}
-            />
-          </div>
+              {/* View Details Button */}
+              {onOpenBulkModal && (
+                <button
+                  onClick={onOpenBulkModal}
+                  className="w-full py-3 px-6 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold hover:from-blue-700 hover:to-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all duration-300 transform hover:scale-[1.02] shadow-lg"
+                >
+                  <div className="flex items-center justify-center">
+                    <Eye className="w-5 h-5 mr-2" />
+                    View Processing Details
+                  </div>
+                </button>
+              )}
 
-          {/* View Details Button */}
-          {onOpenBulkModal && (
-            <button
-              onClick={onOpenBulkModal}
-              className="w-full py-3 px-6 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold hover:from-blue-700 hover:to-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all duration-300 transform hover:scale-[1.02] shadow-lg"
-            >
-              <div className="flex items-center justify-center">
-                <Eye className="w-5 h-5 mr-2" />
-                View Processing Details
+              {/* Additional Info */}
+              <div className="flex items-center justify-center text-sm text-gray-500 space-x-4">
+                <div className="flex items-center">
+                  <Sparkles className="w-4 h-4 mr-2" />
+                  SEO Engine AI at work
+                </div>
+                <div className="w-1 h-1 bg-gray-400 rounded-full"></div>
+                <div className="flex items-center">
+                  <Clock className="w-4 h-4 mr-2" />
+                  Processing in background
+                </div>
               </div>
-            </button>
-          )}
-
-          {/* Additional Info */}
-          <div className="flex items-center justify-center text-sm text-gray-500 space-x-4">
-            <div className="flex items-center">
-              <Sparkles className="w-4 h-4 mr-2" />
-              SEO Engine AI at work
             </div>
-            <div className="w-1 h-1 bg-gray-400 rounded-full"></div>
-            <div className="flex items-center">
-              <Clock className="w-4 h-4 mr-2" />
-              Processing in background
-            </div>
-          </div>
-        </div>
+          </>
+        )}
       </div>
     );
   };
