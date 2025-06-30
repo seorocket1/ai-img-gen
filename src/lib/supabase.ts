@@ -118,7 +118,17 @@ export const signOut = async () => {
 
 export const getCurrentUser = async () => {
   try {
-    const { data: { user: authUser } } = await supabase.auth.getUser();
+    const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
+    
+    // Handle stale JWT tokens
+    if (authError) {
+      if (authError.message?.includes('User from sub claim in JWT does not exist') || 
+          authError.status === 403) {
+        // Clear the invalid session
+        await supabase.auth.signOut();
+      }
+      throw authError;
+    }
     
     if (!authUser) return null;
 
