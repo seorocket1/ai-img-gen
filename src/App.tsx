@@ -126,9 +126,9 @@ function App() {
     setError(null);
     
     try {
-      console.log('Starting image generation process...');
+      console.log('=== STARTING IMAGE GENERATION ===');
       console.log('Selected type:', selectedType);
-      console.log('Form data:', data);
+      console.log('Raw form data:', data);
       
       // Sanitize the data before sending
       const sanitizedData = sanitizeFormData(data);
@@ -156,8 +156,9 @@ function App() {
         image_detail: imageDetail,
       };
 
-      console.log('Sending payload to webhook:', payload);
+      console.log('=== SENDING TO WEBHOOK ===');
       console.log('Webhook URL:', WEBHOOK_URL);
+      console.log('Payload:', JSON.stringify(payload, null, 2));
 
       const response = await fetch(WEBHOOK_URL, {
         method: 'POST',
@@ -167,8 +168,10 @@ function App() {
         body: JSON.stringify(payload),
       });
 
+      console.log('=== WEBHOOK RESPONSE ===');
       console.log('Response status:', response.status);
       console.log('Response ok:', response.ok);
+      console.log('Response status text:', response.statusText);
       console.log('Response headers:', Object.fromEntries(response.headers.entries()));
 
       if (!response.ok) {
@@ -177,8 +180,10 @@ function App() {
 
       // Get response as text first to debug
       const responseText = await response.text();
-      console.log('Raw response text:', responseText);
+      console.log('=== RAW RESPONSE ===');
       console.log('Response text length:', responseText.length);
+      console.log('First 500 chars:', responseText.substring(0, 500));
+      console.log('Last 100 chars:', responseText.substring(Math.max(0, responseText.length - 100)));
 
       if (!responseText || responseText.trim() === '') {
         throw new Error('Empty response received from server');
@@ -187,53 +192,59 @@ function App() {
       let result;
       try {
         result = JSON.parse(responseText);
-        console.log('Parsed JSON response:', result);
+        console.log('=== PARSED JSON ===');
+        console.log('Result type:', typeof result);
+        console.log('Result keys:', result && typeof result === 'object' ? Object.keys(result) : 'Not an object');
+        console.log('Full result:', result);
       } catch (parseError) {
         console.error('JSON parse error:', parseError);
-        console.log('Response was not valid JSON. Treating as plain text...');
+        console.log('Response was not valid JSON. Checking if it might be base64...');
         
-        // If it's not JSON, maybe it's just the base64 string
-        if (responseText.length > 100 && (responseText.includes('/') || responseText.includes('+'))) {
-          console.log('Treating response as base64 string');
+        // Check if the response looks like base64
+        const base64Regex = /^[A-Za-z0-9+/]*={0,2}$/;
+        if (responseText.length > 100 && base64Regex.test(responseText.trim())) {
+          console.log('Response appears to be base64 string');
           result = { image: responseText.trim() };
         } else {
-          throw new Error(`Invalid response format. Expected JSON but got: ${responseText.substring(0, 100)}...`);
+          throw new Error(`Invalid response format. Expected JSON but got: ${responseText.substring(0, 200)}...`);
         }
       }
 
-      console.log('Processing result:', typeof result, result);
+      console.log('=== EXTRACTING IMAGE DATA ===');
 
       // Check for different possible response formats
       let imageBase64 = null;
       
       // Try different possible property names for the image data
       if (result && typeof result === 'object') {
-        if (result.image) {
-          imageBase64 = result.image;
-          console.log('Found image in result.image');
-        } else if (result.data && result.data.image) {
-          imageBase64 = result.data.image;
-          console.log('Found image in result.data.image');
-        } else if (result.base64) {
-          imageBase64 = result.base64;
-          console.log('Found image in result.base64');
-        } else if (result.imageData) {
-          imageBase64 = result.imageData;
-          console.log('Found image in result.imageData');
-        } else if (result.image_data) {
-          imageBase64 = result.image_data;
-          console.log('Found image in result.image_data');
-        } else if (result.output) {
-          imageBase64 = result.output;
-          console.log('Found image in result.output');
-        } else {
-          console.log('Checking all properties of result:', Object.keys(result));
-          // Try to find any property that looks like base64
+        const possibleKeys = ['image', 'data', 'base64', 'imageData', 'image_data', 'output', 'result', 'response'];
+        
+        for (const key of possibleKeys) {
+          if (result[key]) {
+            console.log(`Found image data in property: ${key}`);
+            imageBase64 = result[key];
+            break;
+          }
+          
+          // Check nested objects
+          if (result[key] && typeof result[key] === 'object' && result[key].image) {
+            console.log(`Found image data in nested property: ${key}.image`);
+            imageBase64 = result[key].image;
+            break;
+          }
+        }
+        
+        // If still not found, look for any string property that looks like base64
+        if (!imageBase64) {
+          console.log('Searching all properties for base64-like strings...');
           for (const [key, value] of Object.entries(result)) {
-            if (typeof value === 'string' && value.length > 100 && (value.includes('/') || value.includes('+'))) {
-              console.log(`Found potential base64 in property: ${key}`);
-              imageBase64 = value;
-              break;
+            if (typeof value === 'string' && value.length > 100) {
+              const base64Regex = /^[A-Za-z0-9+/]*={0,2}$/;
+              if (base64Regex.test(value)) {
+                console.log(`Found potential base64 in property: ${key}`);
+                imageBase64 = value;
+                break;
+              }
             }
           }
         }
@@ -243,11 +254,14 @@ function App() {
         imageBase64 = result;
       }
 
-      console.log('Extracted image base64:', imageBase64 ? `Found (length: ${imageBase64.length})` : 'Not found');
+      console.log('=== IMAGE DATA VALIDATION ===');
+      console.log('Image base64 found:', !!imageBase64);
+      console.log('Image base64 length:', imageBase64 ? imageBase64.length : 0);
 
       if (!imageBase64) {
-        console.error('No image data found in response. Full response:', result);
-        throw new Error('No image data received from the server. Please check the webhook response format.');
+        console.error('=== NO IMAGE DATA FOUND ===');
+        console.error('Full response structure:', JSON.stringify(result, null, 2));
+        throw new Error('No image data found in response. Please check the webhook response format.');
       }
 
       // Clean the base64 string (remove data URL prefix if present)
@@ -261,7 +275,16 @@ function App() {
         throw new Error('Received image data is too short to be valid');
       }
 
-      console.log('Final base64 length:', imageBase64.length);
+      // Test if it's valid base64
+      try {
+        atob(imageBase64.substring(0, 100)); // Test decode a small portion
+        console.log('Base64 validation passed');
+      } catch (base64Error) {
+        console.error('Base64 validation failed:', base64Error);
+        throw new Error('Received data is not valid base64 format');
+      }
+
+      console.log('=== PROCESSING CREDITS AND DATABASE ===');
 
       // Deduct credits for authenticated users (only if Supabase is configured)
       if (user && isAuthenticated && isSupabaseConfigured) {
@@ -299,6 +322,8 @@ function App() {
         }
       }
 
+      console.log('=== FINALIZING IMAGE GENERATION ===');
+
       const newImage = {
         base64: imageBase64,
         type: selectedType as 'blog' | 'infographic',
@@ -328,9 +353,12 @@ function App() {
       // Show success notification
       setShowSuccessNotification(true);
       
-      console.log('Image generation process completed successfully');
+      console.log('=== IMAGE GENERATION COMPLETED SUCCESSFULLY ===');
     } catch (error) {
-      console.error('Error generating image:', error);
+      console.error('=== IMAGE GENERATION ERROR ===');
+      console.error('Error details:', error);
+      console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace');
+      
       let errorMessage = 'Failed to generate image. Please try again.';
       
       if (error instanceof Error) {
@@ -340,6 +368,8 @@ function App() {
           errorMessage = `Server error: ${error.message}`;
         } else if (error.message.includes('Empty response')) {
           errorMessage = 'No response received from server. Please try again.';
+        } else if (error.message.includes('base64')) {
+          errorMessage = 'Invalid image data received. Please try again.';
         } else {
           errorMessage = error.message;
         }
@@ -348,6 +378,7 @@ function App() {
       setError(errorMessage);
     } finally {
       setIsProcessing(false);
+      console.log('=== PROCESSING COMPLETED ===');
     }
   };
 
