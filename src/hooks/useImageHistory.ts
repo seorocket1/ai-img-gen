@@ -1,17 +1,61 @@
 import { useState, useEffect, useCallback } from 'react';
 import { HistoryImage } from '../types/history';
+import { useSupabaseAuth } from './useSupabaseAuth';
+import { isSupabaseConfigured } from '../lib/supabase';
 
 const STORAGE_KEY = 'seo_engine_image_history';
 const MAX_HISTORY_ITEMS = 50;
 
 export const useImageHistory = () => {
+  const { user, isAuthenticated } = useSupabaseAuth();
   const [history, setHistory] = useState<HistoryImage[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Load history from localStorage on mount
-  const loadHistoryFromStorage = useCallback(() => {
+  // Create user-specific storage key
+  const getUserStorageKey = useCallback(() => {
+    if (user && isAuthenticated && isSupabaseConfigured) {
+      return `${STORAGE_KEY}_${user.id}`;
+    }
+    return STORAGE_KEY; // Fallback for anonymous users
+  }, [user, isAuthenticated]);
+
+  // Load history from localStorage and database
+  const loadHistoryFromStorage = useCallback(async () => {
     try {
-      const savedHistory = localStorage.getItem(STORAGE_KEY);
+      setIsLoading(true);
+      const storageKey = getUserStorageKey();
+      
+      // First, try to load from database if user is authenticated
+      if (user && isAuthenticated && isSupabaseConfigured) {
+        try {
+          const { getUserImageGenerations } = await import('../lib/supabase');
+          const dbHistory = await getUserImageGenerations(user.id);
+          
+          // Convert database format to history format
+          const convertedHistory: HistoryImage[] = dbHistory.map(item => ({
+            id: item.id,
+            type: item.image_type,
+            title: item.title || (item.image_type === 'blog' ? 'Blog Image' : 'Infographic'),
+            content: item.content,
+            base64: item.image_data,
+            timestamp: new Date(item.created_at).getTime(),
+            style: item.style,
+            colour: item.colour,
+          }));
+          
+          console.log('Loaded history from database:', convertedHistory.length, 'items');
+          setHistory(convertedHistory);
+          
+          // Also save to localStorage for offline access
+          localStorage.setItem(storageKey, JSON.stringify(convertedHistory));
+          return;
+        } catch (dbError) {
+          console.error('Error loading from database, falling back to localStorage:', dbError);
+        }
+      }
+      
+      // Fallback to localStorage
+      const savedHistory = localStorage.getItem(storageKey);
       console.log('Loading history from localStorage:', savedHistory);
       
       if (savedHistory) {
@@ -42,13 +86,14 @@ export const useImageHistory = () => {
       console.error('Error loading image history:', error);
       setHistory([]);
       // Clear corrupted data
-      localStorage.removeItem(STORAGE_KEY);
+      const storageKey = getUserStorageKey();
+      localStorage.removeItem(storageKey);
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [getUserStorageKey, user, isAuthenticated]);
 
-  // Load history on mount
+  // Load history on mount and when user changes
   useEffect(() => {
     loadHistoryFromStorage();
   }, [loadHistoryFromStorage]);
@@ -56,8 +101,9 @@ export const useImageHistory = () => {
   // Save history to localStorage whenever it changes
   const saveHistoryToStorage = useCallback((historyData: HistoryImage[]) => {
     try {
+      const storageKey = getUserStorageKey();
       console.log('Saving history to localStorage:', historyData.length, 'items');
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(historyData));
+      localStorage.setItem(storageKey, JSON.stringify(historyData));
       
       // Dispatch a custom event to notify other components
       window.dispatchEvent(new CustomEvent('historyUpdated', { 
@@ -66,12 +112,13 @@ export const useImageHistory = () => {
     } catch (error) {
       console.error('Error saving image history:', error);
     }
-  }, []);
+  }, [getUserStorageKey]);
 
   // Listen for storage changes from other tabs/windows
   useEffect(() => {
     const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === STORAGE_KEY) {
+      const storageKey = getUserStorageKey();
+      if (e.key === storageKey) {
         console.log('Storage changed externally, reloading history');
         loadHistoryFromStorage();
       }
@@ -90,7 +137,7 @@ export const useImageHistory = () => {
       window.removeEventListener('storage', handleStorageChange);
       window.removeEventListener('historyUpdated', handleHistoryUpdate as EventListener);
     };
-  }, [loadHistoryFromStorage]);
+  }, [loadHistoryFromStorage, getUserStorageKey]);
 
   const addToHistory = useCallback((image: HistoryImage) => {
     console.log('Adding to history:', {
@@ -145,13 +192,14 @@ export const useImageHistory = () => {
   const clearHistory = useCallback(() => {
     console.log('Clearing all history');
     setHistory([]);
-    localStorage.removeItem(STORAGE_KEY);
+    const storageKey = getUserStorageKey();
+    localStorage.removeItem(storageKey);
     
     // Dispatch event to notify other components
     window.dispatchEvent(new CustomEvent('historyUpdated', { 
       detail: { history: [] } 
     }));
-  }, []);
+  }, [getUserStorageKey]);
 
   const getImageById = useCallback((id: string) => {
     return history.find(img => img.id === id);
@@ -161,6 +209,8 @@ export const useImageHistory = () => {
   console.log('Current history state:', {
     length: history.length,
     isLoading,
+    userId: user?.id,
+    storageKey: getUserStorageKey(),
     items: history.map(h => ({ id: h.id, type: h.type, title: h.title }))
   });
 

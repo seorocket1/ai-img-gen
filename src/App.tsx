@@ -466,7 +466,16 @@ function App() {
           <div className="flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 mx-auto mb-4">
             <Sparkles className="w-8 h-8 text-white animate-pulse" />
           </div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">SEO Engine</h2>
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">
+            <a 
+              href="https://seoengine.agency/" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="text-blue-600 hover:text-blue-700 transition-colors"
+            >
+              SEO Engine
+            </a>
+          </h2>
           <p className="text-gray-600">Loading...</p>
         </div>
       </div>
@@ -550,7 +559,15 @@ function App() {
             <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-12">
               <div className="flex items-center px-4 py-2 bg-white/10 backdrop-blur-sm rounded-full border border-white/20 text-white">
                 <Zap className="w-5 h-5 mr-2 text-blue-400" />
-                Powered by SEO Engine
+                Powered by{' '}
+                <a 
+                  href="https://seoengine.agency/" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="ml-1 font-semibold text-blue-300 hover:text-blue-200 transition-colors"
+                >
+                  SEO Engine
+                </a>
               </div>
               <div className="hidden sm:block w-2 h-2 bg-white/30 rounded-full"></div>
               <div className="flex items-center px-4 py-2 bg-white/10 backdrop-blur-sm rounded-full border border-white/20 text-white">
@@ -613,7 +630,15 @@ function App() {
             <div className="flex items-center space-x-4">
               <div className="hidden sm:flex items-center text-sm text-gray-500">
                 <Zap className="w-4 h-4 mr-2" />
-                Powered by <span className="font-semibold text-blue-600 ml-1">SEO Engine</span>
+                Powered by{' '}
+                <a 
+                  href="https://seoengine.agency/" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="font-semibold text-blue-600 ml-1 hover:text-blue-700 transition-colors"
+                >
+                  SEO Engine
+                </a>
               </div>
               <div className="flex items-center space-x-3">
                 {/* Credits Display */}
@@ -796,15 +821,29 @@ function App() {
               <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 mr-3">
                 <Sparkles className="w-4 h-4 text-white" />
               </div>
-              <span className="text-xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
+              <a 
+                href="https://seoengine.agency/" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="text-xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent hover:from-blue-700 hover:to-indigo-700 transition-all duration-300"
+              >
                 SEO Engine
-              </span>
+              </a>
             </div>
             <p className="text-gray-600 mb-2">
               Empowering content creators with AI-driven visual solutions
             </p>
             <p className="text-sm text-gray-500">
-              © 2025 SEO Engine. All rights reserved. | Transforming ideas into stunning visuals.
+              © 2025{' '}
+              <a 
+                href="https://seoengine.agency/" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="text-blue-600 hover:text-blue-700 transition-colors"
+              >
+                SEO Engine
+              </a>
+              . All rights reserved. | Transforming ideas into stunning visuals.
             </p>
           </div>
         </div>
