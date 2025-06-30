@@ -16,7 +16,7 @@ export interface User {
   name: string;
   brand_name?: string;
   website_url?: string;
-  user_id: string;
+  username: string;
   credits: number;
   is_admin: boolean;
   created_at: string;
@@ -42,7 +42,7 @@ export const signUp = async (userData: {
   name: string;
   brand_name?: string;
   website_url?: string;
-  user_id: string;
+  username: string;
   password: string;
 }) => {
   try {
@@ -55,7 +55,7 @@ export const signUp = async (userData: {
     if (authError) throw authError;
 
     if (authData.user) {
-      // Create user profile with custom user_id (removed password_hash field)
+      // Create user profile
       const { data: profileData, error: profileError } = await supabase
         .from('users')
         .insert({
@@ -64,12 +64,25 @@ export const signUp = async (userData: {
           name: userData.name,
           brand_name: userData.brand_name,
           website_url: userData.website_url,
-          user_id: userData.user_id,
+          username: userData.username,
         })
         .select()
         .single();
 
-      if (profileError) throw profileError;
+      if (profileError) {
+        // If profile creation fails, clean up the auth user
+        await supabase.auth.signOut();
+        
+        if (profileError.code === '23505') {
+          // Unique constraint violation
+          if (profileError.message.includes('username')) {
+            throw new Error('Username already taken. Please choose a different username.');
+          } else if (profileError.message.includes('email')) {
+            throw new Error('Email already registered. Please use a different email or sign in.');
+          }
+        }
+        throw new Error('Failed to create user profile. Please try again.');
+      }
 
       return { user: profileData, authUser: authData.user };
     }
@@ -91,7 +104,7 @@ export const signIn = async (email: string, password: string) => {
     if (authError) throw authError;
 
     if (authData.user) {
-      // Get user profile using maybeSingle() to handle missing profiles gracefully
+      // Get user profile
       const { data: profileData, error: profileError } = await supabase
         .from('users')
         .select('*')
@@ -125,29 +138,33 @@ export const getCurrentUser = async () => {
   try {
     const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
     
-    // Handle stale JWT tokens
     if (authError) {
-      if (authError.message?.includes('User from sub claim in JWT does not exist') || 
-          authError.status === 403) {
-        // Clear the invalid session
-        await supabase.auth.signOut();
+      // Handle expected "Auth session missing!" error gracefully
+      if (authError.message === 'Auth session missing!') {
+        console.info('No active Supabase session found.');
+        return null;
       }
+      console.error('Auth error:', authError);
       throw authError;
     }
     
     if (!authUser) return null;
 
-    // Use maybeSingle() to handle missing profiles gracefully
+    // Get user profile
     const { data: profileData, error: profileError } = await supabase
       .from('users')
       .select('*')
       .eq('id', authUser.id)
       .maybeSingle();
 
-    if (profileError) throw profileError;
+    if (profileError) {
+      console.error('Profile error:', profileError);
+      throw profileError;
+    }
 
     // If no profile found, sign out and return null
     if (!profileData) {
+      console.warn('No profile found for authenticated user');
       await supabase.auth.signOut();
       return null;
     }
@@ -236,7 +253,7 @@ export const getUserImageGenerations = async (userId: string) => {
   }
 };
 
-// Admin functions
+// Admin functions (using service role)
 export const getAllUsers = async () => {
   try {
     const { data, error } = await supabase
@@ -278,7 +295,7 @@ export const getAllImageGenerations = async () => {
         users (
           name,
           email,
-          user_id
+          username
         )
       `)
       .order('created_at', { ascending: false });
