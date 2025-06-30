@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, User, Building, Globe, IdCard, Lock, Eye, EyeOff, Sparkles } from 'lucide-react';
+import { X, User, Building, Globe, Car as IdCard, Lock, Eye, EyeOff, Sparkles } from 'lucide-react';
 
 interface SignUpModalProps {
   isOpen: boolean;
