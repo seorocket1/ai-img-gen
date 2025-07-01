@@ -28,15 +28,16 @@ export const useImageHistory = () => {
       // First, try to load from database if user is authenticated
       if (user && isAuthenticated && isSupabaseConfigured) {
         try {
+          console.log('Loading history from database for user:', user.id);
           const { getUserImageGenerations } = await import('../lib/supabase');
           const dbHistory = await getUserImageGenerations(user.id);
           
           // Convert database format to history format
           const convertedHistory: HistoryImage[] = dbHistory.map(item => ({
             id: item.id,
-            type: item.image_type,
+            type: item.image_type as 'blog' | 'infographic',
             title: item.title || (item.image_type === 'blog' ? 'Blog Image' : 'Infographic'),
-            content: item.content,
+            content: item.content || '',
             base64: item.image_data,
             timestamp: new Date(item.created_at).getTime(),
             style: item.style,
@@ -56,30 +57,37 @@ export const useImageHistory = () => {
       
       // Fallback to localStorage
       const savedHistory = localStorage.getItem(storageKey);
-      console.log('Loading history from localStorage:', savedHistory);
+      console.log('Loading history from localStorage:', savedHistory ? 'found data' : 'no data');
       
       if (savedHistory) {
-        const parsed = JSON.parse(savedHistory);
-        console.log('Parsed history:', parsed);
-        
-        // Ensure we have valid data structure
-        if (Array.isArray(parsed)) {
-          // Validate each item has required properties
-          const validHistory = parsed.filter(item => 
-            item && 
-            typeof item === 'object' && 
-            item.id && 
-            item.base64 && 
-            item.type &&
-            item.timestamp
-          );
-          console.log('Valid history items:', validHistory.length);
-          setHistory(validHistory);
-        } else {
-          console.log('Invalid history format, resetting');
+        try {
+          const parsed = JSON.parse(savedHistory);
+          console.log('Parsed history:', parsed);
+          
+          // Ensure we have valid data structure
+          if (Array.isArray(parsed)) {
+            // Validate each item has required properties
+            const validHistory = parsed.filter(item => 
+              item && 
+              typeof item === 'object' && 
+              item.id && 
+              item.base64 && 
+              item.type &&
+              item.timestamp
+            );
+            console.log('Valid history items:', validHistory.length);
+            setHistory(validHistory);
+          } else {
+            console.log('Invalid history format, resetting');
+            setHistory([]);
+          }
+        } catch (parseError) {
+          console.error('Error parsing localStorage history:', parseError);
           setHistory([]);
+          localStorage.removeItem(storageKey);
         }
       } else {
+        console.log('No localStorage history found');
         setHistory([]);
       }
     } catch (error) {

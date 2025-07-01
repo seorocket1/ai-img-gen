@@ -188,7 +188,8 @@ export const signOut = async () => {
 
 export const getCurrentUser = async (): Promise<{ user: any; profile: UserProfile | null } | null> => {
   if (!supabase) {
-    throw new Error('Supabase client not initialized')
+    console.log('Supabase client not initialized')
+    return null
   }
 
   try {
@@ -302,9 +303,20 @@ export const deductCredits = async (userId: string, amount: number) => {
     throw new Error('Supabase client not initialized')
   }
 
+  // Get current credits first
+  const { data: currentUser, error: fetchError } = await supabase
+    .from('users')
+    .select('credits')
+    .eq('id', userId)
+    .single()
+
+  if (fetchError) throw fetchError
+
+  const newCredits = Math.max(0, currentUser.credits - amount)
+
   const { data, error } = await supabase
     .from('users')
-    .update({ credits: supabase.raw(`credits - ${amount}`) })
+    .update({ credits: newCredits })
     .eq('id', userId)
     .select('credits')
     .single()
@@ -343,15 +355,79 @@ export const getAllImageGenerations = async (): Promise<ImageGeneration[]> => {
 
 export const getUserImageGenerations = async (userId: string): Promise<ImageGeneration[]> => {
   if (!supabase) {
+    console.log('Supabase client not initialized, returning empty array')
+    return []
+  }
+
+  try {
+    console.log('Fetching image generations for user:', userId)
+    
+    const { data, error } = await supabase
+      .from('image_generations')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+
+    if (error) {
+      console.error('Error fetching user image generations:', error)
+      throw error
+    }
+
+    console.log('Successfully fetched image generations:', data?.length || 0, 'items')
+    return data || []
+  } catch (error) {
+    console.error('getUserImageGenerations error:', error)
+    throw error
+  }
+}
+
+export const saveImageGeneration = async (imageData: {
+  user_id: string
+  image_type: 'blog' | 'infographic'
+  title?: string
+  content?: string
+  style?: string
+  colour?: string
+  credits_used: number
+  image_data: string
+}) => {
+  if (!supabase) {
     throw new Error('Supabase client not initialized')
   }
 
-  const { data, error } = await supabase
-    .from('image_generations')
-    .select('*')
-    .eq('user_id', userId)
-    .order('created_at', { ascending: false })
+  try {
+    console.log('Saving image generation to database:', {
+      user_id: imageData.user_id,
+      image_type: imageData.image_type,
+      title: imageData.title,
+      credits_used: imageData.credits_used,
+      has_image_data: !!imageData.image_data
+    })
 
-  if (error) throw error
-  return data || []
+    const { data, error } = await supabase
+      .from('image_generations')
+      .insert({
+        user_id: imageData.user_id,
+        image_type: imageData.image_type,
+        title: imageData.title || null,
+        content: imageData.content || null,
+        style: imageData.style || null,
+        colour: imageData.colour || null,
+        credits_used: imageData.credits_used,
+        image_data: imageData.image_data
+      })
+      .select()
+      .single()
+
+    if (error) {
+      console.error('Error saving image generation:', error)
+      throw error
+    }
+
+    console.log('Successfully saved image generation:', data.id)
+    return data
+  } catch (error) {
+    console.error('saveImageGeneration error:', error)
+    throw error
+  }
 }
