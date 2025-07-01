@@ -237,6 +237,18 @@ export const updateUserProfile = async (userId: string, updates: Partial<UserPro
   return data
 }
 
+export const updateUserCredits = async (userId: string, credits: number) => {
+  const { data, error } = await supabase
+    .from('users')
+    .update({ credits })
+    .eq('id', userId)
+    .select()
+    .single()
+
+  if (error) throw error
+  return data
+}
+
 export const getUserCredits = async (userId: string): Promise<number> => {
   const { data, error } = await supabase
     .from('users')
