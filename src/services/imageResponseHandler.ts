@@ -41,7 +41,7 @@ export const extractImageFromResponse = (responseData: any, responseText: string
 
   let imageBase64 = null;
 
-  // Method 1: Direct property access (most common case)
+  // Method 1: Direct property access (most common case for n8n webhook)
   if (responseData && typeof responseData === 'object') {
     // Check for 'image' property first (most likely from n8n)
     if (responseData.image && typeof responseData.image === 'string') {
@@ -101,16 +101,22 @@ export const extractImageFromResponse = (responseData: any, responseText: string
   // Clean the base64 string
   if (imageBase64) {
     console.log('🧹 Cleaning base64 string...');
+    console.log('Original length:', imageBase64.length);
     
     // Remove data URL prefix if present
     if (imageBase64.startsWith('data:image/')) {
       imageBase64 = imageBase64.split(',')[1];
+      console.log('Removed data URL prefix');
     }
     
-    // Remove any whitespace
-    imageBase64 = imageBase64.replace(/\s/g, '');
+    // Remove any whitespace, newlines, and other unwanted characters
+    const originalLength = imageBase64.length;
+    imageBase64 = imageBase64.replace(/[\s\n\r\t]/g, '');
+    console.log('Removed whitespace, length change:', originalLength, '->', imageBase64.length);
     
     console.log('✅ Final cleaned base64 length:', imageBase64.length);
+    console.log('First 50 chars:', imageBase64.substring(0, 50));
+    console.log('Last 20 chars:', imageBase64.substring(imageBase64.length - 20));
   }
 
   console.log('🎯 Image extraction result:', {
@@ -132,7 +138,14 @@ export const validateImageData = (imageBase64: string): boolean => {
   }
 
   if (imageBase64.length < 1000) {
-    console.error('❌ Invalid image data: too short');
+    console.error('❌ Invalid image data: too short (', imageBase64.length, 'chars)');
+    return false;
+  }
+
+  // Check if it's valid base64 format
+  const base64Regex = /^[A-Za-z0-9+/]*={0,2}$/;
+  if (!base64Regex.test(imageBase64)) {
+    console.error('❌ Invalid base64 format detected');
     return false;
   }
 
@@ -214,6 +227,7 @@ export const createHistoryImage = (
     type: historyImage.type,
     title: historyImage.title,
     hasBase64: !!historyImage.base64,
+    base64Length: historyImage.base64.length,
     timestamp: historyImage.timestamp
   });
 
@@ -234,18 +248,27 @@ export const processImageResponse = async (
 
   try {
     console.log('🚀 Processing image response...');
+    console.log('Image type:', imageType);
+    console.log('Form data:', formData);
+    console.log('Options:', { hasUser: !!user, hasOnImageGenerated: !!onImageGenerated, isBulkProcessing });
 
     // Extract image data
     const imageBase64 = extractImageFromResponse(responseData, responseText);
     
     if (!imageBase64) {
-      throw new Error('No image data found in response');
+      console.error('❌ No image data found in response');
+      console.error('Response data:', responseData);
+      console.error('Response text sample:', responseText.substring(0, 500));
+      throw new Error('No image data found in response. The image generation service may have failed.');
     }
 
     // Validate image data
     if (!validateImageData(imageBase64)) {
-      throw new Error('Invalid image data received');
+      console.error('❌ Image data validation failed');
+      throw new Error('Invalid image data received. Please try again.');
     }
+
+    console.log('✅ Image data extracted and validated successfully');
 
     // Create history image
     const historyImage = createHistoryImage(imageBase64, imageType, formData);
@@ -253,11 +276,14 @@ export const processImageResponse = async (
     // Process credits and database operations for authenticated users
     if (user && isSupabaseConfigured) {
       try {
+        console.log('💳 Processing credits and database operations...');
+        
         // Deduct credits
         await deductUserCredits(user.id, CREDIT_COSTS[imageType]);
         
         // Refresh user data
         if (onRefreshUser) {
+          console.log('🔄 Refreshing user data...');
           onRefreshUser();
         }
 
@@ -272,22 +298,32 @@ export const processImageResponse = async (
           credits_used: CREDIT_COSTS[imageType],
           image_data: imageBase64,
         });
+
+        console.log('✅ Credits and database operations completed');
       } catch (error) {
         console.error('⚠️ Error in credit/database operations:', error);
         // Continue with image generation even if these operations fail
+        console.log('⚠️ Continuing with image generation despite credit/database errors');
       }
+    } else {
+      console.log('ℹ️ Skipping credits/database operations (no user or Supabase not configured)');
     }
 
     // Add to history
     if (onImageGenerated) {
+      console.log('📝 Adding image to history...');
       onImageGenerated(historyImage);
+      console.log('✅ Image added to history successfully');
+    } else {
+      console.log('⚠️ No onImageGenerated callback provided');
     }
 
-    console.log('✅ Image response processed successfully');
+    console.log('🎉 Image response processed successfully!');
     return { success: true, image: historyImage };
 
   } catch (error) {
     console.error('❌ Error processing image response:', error);
+    console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace');
     
     let errorMessage = 'Failed to process image response';
     if (error instanceof Error) {
