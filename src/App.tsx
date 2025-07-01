@@ -124,7 +124,7 @@ function App() {
     // Set timeout for the request
     const requestTimeout = setTimeout(() => {
       controller.abort();
-      console.error('Request aborted due to timeout');
+      console.error('❌ Request aborted due to timeout');
     }, 120000); // 2 minutes timeout
 
     setIsProcessing(true);
@@ -132,7 +132,7 @@ function App() {
     setError(null);
     
     try {
-      console.log('🚀 Starting image generation...');
+      console.log('🚀 STARTING N8N WEBHOOK IMAGE GENERATION');
       console.log('Selected type:', selectedType);
       console.log('Form data:', data);
       
@@ -162,7 +162,7 @@ function App() {
         image_detail: imageDetail,
       };
 
-      console.log('📤 Sending to webhook:', payload);
+      console.log('📤 Sending to n8n webhook:', payload);
 
       const response = await fetch(WEBHOOK_URL, {
         method: 'POST',
@@ -177,15 +177,15 @@ function App() {
 
       clearTimeout(requestTimeout);
 
-      console.log('📥 Webhook response received:', response.status);
+      console.log('📥 N8N webhook response received:', response.status, response.statusText);
 
       if (!response.ok) {
         let errorText = '';
         try {
           errorText = await response.text();
-          console.error('Error response body:', errorText);
+          console.error('❌ N8N webhook error response:', errorText);
         } catch (e) {
-          console.error('Could not read error response body');
+          console.error('❌ Could not read error response body');
         }
         
         if (response.status === 404) {
@@ -201,7 +201,7 @@ function App() {
 
       // Get response as text first
       const responseText = await response.text();
-      console.log('📄 Raw response received, length:', responseText.length);
+      console.log('📄 N8N webhook raw response received, length:', responseText.length);
 
       if (!responseText || responseText.trim() === '') {
         throw new Error('Empty response received from image generation service. Please try again.');
@@ -210,13 +210,14 @@ function App() {
       let result;
       try {
         result = JSON.parse(responseText);
-        console.log('✅ Response parsed as JSON');
+        console.log('✅ N8N webhook response parsed as JSON successfully');
       } catch (parseError) {
-        console.log('⚠️ Response was not valid JSON, treating as raw data');
+        console.log('⚠️ N8N webhook response was not valid JSON, treating as raw data');
         result = responseText.trim();
       }
 
-      // Use the image response handler
+      // Use the enhanced image response handler
+      console.log('🔄 Processing n8n webhook response with image handler...');
       const processResult = await processImageResponse(
         result,
         responseText,
@@ -231,20 +232,24 @@ function App() {
       );
 
       if (!processResult.success) {
-        throw new Error(processResult.error || 'Failed to process image response');
+        console.error('❌ Image response processing failed:', processResult.error);
+        throw new Error(processResult.error || 'Failed to process image response from webhook');
       }
 
       if (!processResult.image) {
-        throw new Error('No image data received');
+        console.error('❌ No image data received from processing');
+        throw new Error('No image data received from webhook');
       }
 
-      console.log('✅ Image generation completed successfully');
+      console.log('✅ N8N WEBHOOK IMAGE GENERATION COMPLETED SUCCESSFULLY');
 
+      // Create the generated image object for the UI
       const newImage = {
         base64: processResult.image.base64,
         type: selectedType as 'blog' | 'infographic',
       };
       
+      // Update the UI state
       setGeneratedImage(newImage);
       setCurrentStep('result');
       
@@ -252,7 +257,11 @@ function App() {
       setShowSuccessNotification(true);
       
     } catch (error) {
-      console.error('❌ Image generation error:', error);
+      console.error('❌ N8N WEBHOOK IMAGE GENERATION ERROR:', error);
+      console.error('Error type:', typeof error);
+      console.error('Error name:', error instanceof Error ? error.name : 'Unknown');
+      console.error('Error message:', error instanceof Error ? error.message : 'Unknown error');
+      console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace');
       
       let errorMessage = 'Failed to generate image. Please try again.';
       
@@ -280,6 +289,7 @@ function App() {
     } finally {
       clearTimeout(requestTimeout);
       setIsProcessing(false);
+      console.log('🏁 N8N webhook processing completed');
     }
   };
 

@@ -34,21 +34,26 @@ interface ProcessImageOptions {
  * Enhanced image extraction function that handles all webhook response formats
  */
 export const extractImageFromResponse = (responseData: any, responseText: string): string | null => {
-  console.log('🔍 EXTRACTING IMAGE DATA');
+  console.log('🔍 EXTRACTING IMAGE DATA FROM N8N WEBHOOK');
   console.log('Response data type:', typeof responseData);
   console.log('Response text length:', responseText.length);
-  console.log('Response data keys:', responseData && typeof responseData === 'object' ? Object.keys(responseData) : 'Not an object');
+  
+  if (responseData && typeof responseData === 'object') {
+    console.log('Response data keys:', Object.keys(responseData));
+  }
 
   let imageBase64 = null;
 
-  // Method 1: Direct property access (most common case for n8n webhook)
+  // Method 1: Direct property access for n8n webhook format
   if (responseData && typeof responseData === 'object') {
-    // Check for 'image' property first (most likely from n8n)
+    // Check for 'image' property first (n8n webhook format)
     if (responseData.image && typeof responseData.image === 'string') {
-      console.log('✅ Found image in responseData.image');
+      console.log('✅ Found image in responseData.image (n8n format)');
+      console.log('Image data length:', responseData.image.length);
+      console.log('Image data preview:', responseData.image.substring(0, 100) + '...');
       imageBase64 = responseData.image;
     }
-    // Check other common property names
+    // Check other possible property names
     else if (responseData.data && typeof responseData.data === 'string') {
       console.log('✅ Found image in responseData.data');
       imageBase64 = responseData.data;
@@ -62,6 +67,10 @@ export const extractImageFromResponse = (responseData: any, responseText: string
       console.log('✅ Found image in responseData.data.image');
       imageBase64 = responseData.data.image;
     }
+    else {
+      console.log('❌ No image property found in response object');
+      console.log('Available properties:', Object.keys(responseData));
+    }
   }
 
   // Method 2: If response is a string, treat it as base64
@@ -70,21 +79,24 @@ export const extractImageFromResponse = (responseData: any, responseText: string
     imageBase64 = responseData;
   }
 
-  // Method 3: Parse response text for base64 patterns
+  // Method 3: Parse response text for base64 patterns (fallback)
   if (!imageBase64 && responseText && responseText.length > 100) {
     console.log('🔍 Searching response text for base64 patterns');
     
-    // Look for data URL pattern
-    const dataUrlMatch = responseText.match(/data:image\/[^;]+;base64,([A-Za-z0-9+/=]+)/);
-    if (dataUrlMatch && dataUrlMatch[1]) {
-      console.log('✅ Found base64 in data URL');
-      imageBase64 = dataUrlMatch[1];
-    }
-    // Look for JSON with image property
-    else {
-      const imageMatch = responseText.match(/"image"\s*:\s*"([A-Za-z0-9+/=]+)"/);
+    try {
+      // Try to parse as JSON first
+      const parsed = JSON.parse(responseText);
+      if (parsed && parsed.image && typeof parsed.image === 'string') {
+        console.log('✅ Found image in parsed JSON from response text');
+        imageBase64 = parsed.image;
+      }
+    } catch (parseError) {
+      console.log('⚠️ Could not parse response text as JSON, trying regex patterns');
+      
+      // Look for JSON with image property using regex
+      const imageMatch = responseText.match(/"image"\s*:\s*"([^"]+)"/);
       if (imageMatch && imageMatch[1]) {
-        console.log('✅ Found base64 in JSON image property');
+        console.log('✅ Found base64 in JSON image property via regex');
         imageBase64 = imageMatch[1];
       }
       // Look for standalone base64 (at least 1000 chars)
@@ -98,28 +110,53 @@ export const extractImageFromResponse = (responseData: any, responseText: string
     }
   }
 
-  // Clean the base64 string
+  // Clean and validate the base64 string
   if (imageBase64) {
     console.log('🧹 Cleaning base64 string...');
     console.log('Original length:', imageBase64.length);
     
     // Remove data URL prefix if present
     if (imageBase64.startsWith('data:image/')) {
-      imageBase64 = imageBase64.split(',')[1];
-      console.log('Removed data URL prefix');
+      const parts = imageBase64.split(',');
+      if (parts.length > 1) {
+        imageBase64 = parts[1];
+        console.log('Removed data URL prefix, new length:', imageBase64.length);
+      }
     }
     
     // Remove any whitespace, newlines, and other unwanted characters
     const originalLength = imageBase64.length;
     imageBase64 = imageBase64.replace(/[\s\n\r\t]/g, '');
-    console.log('Removed whitespace, length change:', originalLength, '->', imageBase64.length);
+    
+    if (originalLength !== imageBase64.length) {
+      console.log('Removed whitespace, length change:', originalLength, '->', imageBase64.length);
+    }
     
     console.log('✅ Final cleaned base64 length:', imageBase64.length);
     console.log('First 50 chars:', imageBase64.substring(0, 50));
     console.log('Last 20 chars:', imageBase64.substring(imageBase64.length - 20));
+    
+    // Additional validation
+    if (imageBase64.length < 1000) {
+      console.error('❌ Base64 string too short after cleaning:', imageBase64.length);
+      return null;
+    }
+    
+    // Test if it's valid base64
+    try {
+      atob(imageBase64.substring(0, 100));
+      console.log('✅ Base64 format validation passed');
+    } catch (testError) {
+      console.error('❌ Base64 format validation failed:', testError);
+      return null;
+    }
+  } else {
+    console.error('❌ No image data found in any format');
+    console.error('Response data structure:', JSON.stringify(responseData, null, 2));
+    console.error('Response text sample:', responseText.substring(0, 500));
   }
 
-  console.log('🎯 Image extraction result:', {
+  console.log('🎯 Final extraction result:', {
     found: !!imageBase64,
     length: imageBase64 ? imageBase64.length : 0,
     isValidLength: imageBase64 ? imageBase64.length > 1000 : false
@@ -132,6 +169,8 @@ export const extractImageFromResponse = (responseData: any, responseText: string
  * Validates base64 image data
  */
 export const validateImageData = (imageBase64: string): boolean => {
+  console.log('🔍 Validating image data...');
+  
   if (!imageBase64 || typeof imageBase64 !== 'string') {
     console.error('❌ Invalid image data: not a string');
     return false;
@@ -146,13 +185,14 @@ export const validateImageData = (imageBase64: string): boolean => {
   const base64Regex = /^[A-Za-z0-9+/]*={0,2}$/;
   if (!base64Regex.test(imageBase64)) {
     console.error('❌ Invalid base64 format detected');
+    console.error('First 100 chars:', imageBase64.substring(0, 100));
     return false;
   }
 
-  // Test if it's valid base64
+  // Test if it's valid base64 by trying to decode
   try {
-    atob(imageBase64.substring(0, 100)); // Test decode a small portion
-    console.log('✅ Base64 validation passed');
+    const testDecode = atob(imageBase64.substring(0, 100));
+    console.log('✅ Base64 validation passed, decoded test length:', testDecode.length);
     return true;
   } catch (base64Error) {
     console.error('❌ Base64 validation failed:', base64Error);
@@ -247,41 +287,46 @@ export const processImageResponse = async (
   const { user, onImageGenerated, onRefreshUser, isBulkProcessing = false } = options;
 
   try {
-    console.log('🚀 Processing image response...');
+    console.log('🚀 PROCESSING IMAGE RESPONSE FROM N8N WEBHOOK');
     console.log('Image type:', imageType);
-    console.log('Form data:', formData);
-    console.log('Options:', { hasUser: !!user, hasOnImageGenerated: !!onImageGenerated, isBulkProcessing });
+    console.log('Form data keys:', Object.keys(formData));
+    console.log('Options:', { 
+      hasUser: !!user, 
+      hasOnImageGenerated: !!onImageGenerated, 
+      isBulkProcessing,
+      userId: user?.id 
+    });
 
-    // Extract image data
+    // Extract image data from n8n webhook response
     const imageBase64 = extractImageFromResponse(responseData, responseText);
     
     if (!imageBase64) {
-      console.error('❌ No image data found in response');
+      console.error('❌ CRITICAL: No image data found in n8n webhook response');
       console.error('Response data:', responseData);
-      console.error('Response text sample:', responseText.substring(0, 500));
-      throw new Error('No image data found in response. The image generation service may have failed.');
+      console.error('Response text sample:', responseText.substring(0, 1000));
+      throw new Error('No image data found in webhook response. The image generation service may have failed.');
     }
 
-    // Validate image data
+    // Validate the extracted image data
     if (!validateImageData(imageBase64)) {
-      console.error('❌ Image data validation failed');
-      throw new Error('Invalid image data received. Please try again.');
+      console.error('❌ CRITICAL: Image data validation failed');
+      throw new Error('Invalid image data received from webhook. Please try again.');
     }
 
-    console.log('✅ Image data extracted and validated successfully');
+    console.log('✅ Image data extracted and validated successfully from n8n webhook');
 
-    // Create history image
+    // Create history image object
     const historyImage = createHistoryImage(imageBase64, imageType, formData);
 
     // Process credits and database operations for authenticated users
     if (user && isSupabaseConfigured) {
       try {
-        console.log('💳 Processing credits and database operations...');
+        console.log('💳 Processing credits and database operations for user:', user.id);
         
-        // Deduct credits
+        // Deduct credits first
         await deductUserCredits(user.id, CREDIT_COSTS[imageType]);
         
-        // Refresh user data
+        // Refresh user data to show updated credits
         if (onRefreshUser) {
           console.log('🔄 Refreshing user data...');
           onRefreshUser();
@@ -299,7 +344,7 @@ export const processImageResponse = async (
           image_data: imageBase64,
         });
 
-        console.log('✅ Credits and database operations completed');
+        console.log('✅ Credits deducted and image saved to database');
       } catch (error) {
         console.error('⚠️ Error in credit/database operations:', error);
         // Continue with image generation even if these operations fail
@@ -309,23 +354,26 @@ export const processImageResponse = async (
       console.log('ℹ️ Skipping credits/database operations (no user or Supabase not configured)');
     }
 
-    // Add to history
+    // Add to history (this is crucial for the UI to update)
     if (onImageGenerated) {
-      console.log('📝 Adding image to history...');
+      console.log('📝 Adding image to history via callback...');
       onImageGenerated(historyImage);
       console.log('✅ Image added to history successfully');
     } else {
-      console.log('⚠️ No onImageGenerated callback provided');
+      console.log('⚠️ No onImageGenerated callback provided - image will not appear in history');
     }
 
-    console.log('🎉 Image response processed successfully!');
+    console.log('🎉 N8N WEBHOOK IMAGE RESPONSE PROCESSED SUCCESSFULLY!');
     return { success: true, image: historyImage };
 
   } catch (error) {
-    console.error('❌ Error processing image response:', error);
+    console.error('❌ CRITICAL ERROR processing n8n webhook image response:', error);
+    console.error('Error type:', typeof error);
+    console.error('Error name:', error instanceof Error ? error.name : 'Unknown');
+    console.error('Error message:', error instanceof Error ? error.message : 'Unknown error');
     console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace');
     
-    let errorMessage = 'Failed to process image response';
+    let errorMessage = 'Failed to process image response from webhook';
     if (error instanceof Error) {
       errorMessage = error.message;
     }
