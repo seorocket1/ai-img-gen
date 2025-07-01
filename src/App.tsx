@@ -17,6 +17,7 @@ import { useSupabaseAuth } from './hooks/useSupabaseAuth';
 import { useImageHistory } from './hooks/useImageHistory';
 import { useProcessingState } from './hooks/useProcessingState';
 import { sanitizeFormData } from './utils/textSanitizer';
+import { handleImageGenerationRequest } from './utils/responseHandler';
 import { isSupabaseConfigured } from './lib/supabase';
 
 type Step = 'select' | 'form' | 'result';
@@ -113,96 +114,6 @@ function App() {
     return true;
   };
 
-  // Simplified and more robust image extraction function
-  const extractImageData = (responseData: any, responseText: string): string | null => {
-    console.log('=== EXTRACTING IMAGE DATA ===');
-    console.log('Response data type:', typeof responseData);
-    console.log('Response text length:', responseText.length);
-    console.log('Response data keys:', responseData && typeof responseData === 'object' ? Object.keys(responseData) : 'Not an object');
-
-    let imageBase64 = null;
-
-    // Method 1: Direct property access (most common case)
-    if (responseData && typeof responseData === 'object') {
-      // Check for 'image' property first (most likely from n8n)
-      if (responseData.image && typeof responseData.image === 'string') {
-        console.log('Found image in responseData.image');
-        imageBase64 = responseData.image;
-      }
-      // Check other common property names
-      else if (responseData.data && typeof responseData.data === 'string') {
-        console.log('Found image in responseData.data');
-        imageBase64 = responseData.data;
-      }
-      else if (responseData.base64 && typeof responseData.base64 === 'string') {
-        console.log('Found image in responseData.base64');
-        imageBase64 = responseData.base64;
-      }
-      // Check for nested structures
-      else if (responseData.data && responseData.data.image) {
-        console.log('Found image in responseData.data.image');
-        imageBase64 = responseData.data.image;
-      }
-    }
-
-    // Method 2: If response is a string, treat it as base64
-    if (!imageBase64 && typeof responseData === 'string' && responseData.length > 100) {
-      console.log('Treating entire response as base64 string');
-      imageBase64 = responseData;
-    }
-
-    // Method 3: Parse response text for base64 patterns
-    if (!imageBase64 && responseText && responseText.length > 100) {
-      console.log('Searching response text for base64 patterns');
-      
-      // Look for data URL pattern
-      const dataUrlMatch = responseText.match(/data:image\/[^;]+;base64,([A-Za-z0-9+/=]+)/);
-      if (dataUrlMatch && dataUrlMatch[1]) {
-        console.log('Found base64 in data URL');
-        imageBase64 = dataUrlMatch[1];
-      }
-      // Look for JSON with image property
-      else {
-        const imageMatch = responseText.match(/"image"\s*:\s*"([A-Za-z0-9+/=]+)"/);
-        if (imageMatch && imageMatch[1]) {
-          console.log('Found base64 in JSON image property');
-          imageBase64 = imageMatch[1];
-        }
-        // Look for standalone base64 (at least 1000 chars)
-        else {
-          const base64Match = responseText.match(/([A-Za-z0-9+/]{1000,}={0,2})/);
-          if (base64Match && base64Match[1]) {
-            console.log('Found standalone base64 pattern');
-            imageBase64 = base64Match[1];
-          }
-        }
-      }
-    }
-
-    // Clean the base64 string
-    if (imageBase64) {
-      // Remove data URL prefix if present
-      if (imageBase64.startsWith('data:image/')) {
-        imageBase64 = imageBase64.split(',')[1];
-      }
-      
-      // Remove any whitespace
-      imageBase64 = imageBase64.replace(/\s/g, '');
-      
-      console.log('Cleaned base64 length:', imageBase64.length);
-      console.log('First 50 chars:', imageBase64.substring(0, 50));
-      console.log('Last 10 chars:', imageBase64.substring(imageBase64.length - 10));
-    }
-
-    console.log('Image extraction result:', {
-      found: !!imageBase64,
-      length: imageBase64 ? imageBase64.length : 0,
-      isValidLength: imageBase64 ? imageBase64.length > 1000 : false
-    });
-
-    return imageBase64;
-  };
-
   const handleFormSubmit = async (data: any) => {
     if (!selectedType) return;
 
@@ -210,15 +121,6 @@ function App() {
     if (!checkCredits(selectedType)) {
       return;
     }
-
-    // Create abort controller for the request
-    const controller = new AbortController();
-    
-    // Set timeout for the request
-    const requestTimeout = setTimeout(() => {
-      controller.abort();
-      console.error('Request aborted due to timeout');
-    }, 120000); // 2 minutes timeout
 
     setIsProcessing(true);
     setFormData(data);
@@ -259,99 +161,16 @@ function App() {
       console.log('Webhook URL:', WEBHOOK_URL);
       console.log('Payload:', JSON.stringify(payload, null, 2));
 
-      const response = await fetch(WEBHOOK_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json, text/plain, */*',
-          'User-Agent': 'SEO-Engine-Image-Generator/1.0',
-        },
-        body: JSON.stringify(payload),
-        signal: controller.signal,
-      });
+      // Use the centralized response handler
+      const result = await handleImageGenerationRequest(WEBHOOK_URL, payload);
 
-      clearTimeout(requestTimeout);
-
-      console.log('=== WEBHOOK RESPONSE ===');
-      console.log('Response status:', response.status);
-      console.log('Response ok:', response.ok);
-      console.log('Response status text:', response.statusText);
-      console.log('Response headers:', Object.fromEntries(response.headers.entries()));
-
-      if (!response.ok) {
-        let errorText = '';
-        try {
-          errorText = await response.text();
-          console.error('Error response body:', errorText);
-        } catch (e) {
-          console.error('Could not read error response body');
-        }
-        
-        if (response.status === 404) {
-          throw new Error('Image generation service not found. Please contact support.');
-        } else if (response.status === 500) {
-          throw new Error('Image generation service is experiencing issues. Please try again later.');
-        } else if (response.status === 503) {
-          throw new Error('Image generation service is temporarily unavailable. Please try again in a few minutes.');
-        } else {
-          throw new Error(`Service error (${response.status}): ${response.statusText}. ${errorText ? `Details: ${errorText}` : ''}`);
-        }
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to generate image');
       }
 
-      // Get response as text first to debug
-      const responseText = await response.text();
-      console.log('=== RAW RESPONSE ===');
-      console.log('Response text length:', responseText.length);
-      console.log('First 200 chars:', responseText.substring(0, 200));
-      console.log('Last 100 chars:', responseText.substring(Math.max(0, responseText.length - 100)));
-
-      if (!responseText || responseText.trim() === '') {
-        throw new Error('Empty response received from image generation service. Please try again.');
-      }
-
-      let result;
-      try {
-        result = JSON.parse(responseText);
-        console.log('=== PARSED JSON ===');
-        console.log('Result type:', typeof result);
-        console.log('Result keys:', result && typeof result === 'object' ? Object.keys(result) : 'Not an object');
-      } catch (parseError) {
-        console.error('JSON parse error:', parseError);
-        console.log('Response was not valid JSON. Treating as raw data...');
-        
-        // If it's not JSON, treat the entire response as potential image data
-        result = responseText.trim();
-      }
-
-      // Use enhanced image extraction function
-      const imageBase64 = extractImageData(result, responseText);
-
-      console.log('=== IMAGE DATA VALIDATION ===');
-      console.log('Image base64 found:', !!imageBase64);
-      console.log('Image base64 length:', imageBase64 ? imageBase64.length : 0);
-
-      if (!imageBase64) {
-        console.error('=== NO IMAGE DATA FOUND ===');
-        console.error('Full response structure:', JSON.stringify(result, null, 2));
-        console.error('Response text sample:', responseText.substring(0, 1000));
-        throw new Error('No image data found in response. The image generation service may have failed. Please try again.');
-      }
-
-      // Validate base64 string length
-      if (imageBase64.length < 1000) {
-        throw new Error('Received image data is too short to be valid. Please try again.');
-      }
-
-      // Test if it's valid base64
-      try {
-        atob(imageBase64.substring(0, 100)); // Test decode a small portion
-        console.log('Base64 validation passed');
-      } catch (base64Error) {
-        console.error('Base64 validation failed:', base64Error);
-        throw new Error('Received data is not valid base64 format. Please try again.');
-      }
-
-      console.log('=== PROCESSING CREDITS AND DATABASE ===');
+      const imageBase64 = result.imageBase64!;
+      console.log('=== IMAGE GENERATION SUCCESSFUL ===');
+      console.log('Image data length:', imageBase64.length);
 
       // Deduct credits for authenticated users (only if Supabase is configured)
       if (user && isAuthenticated && isSupabaseConfigured) {
@@ -424,33 +243,15 @@ function App() {
     } catch (error) {
       console.error('=== IMAGE GENERATION ERROR ===');
       console.error('Error details:', error);
-      console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace');
       
       let errorMessage = 'Failed to generate image. Please try again.';
       
       if (error instanceof Error) {
-        if (error.name === 'AbortError') {
-          errorMessage = 'Request timed out. The image generation is taking longer than expected. Please try again in a few minutes.';
-        } else if (error.message.includes('JSON')) {
-          errorMessage = 'Invalid response format from server. Please contact support if this persists.';
-        } else if (error.message.includes('HTTP error') || error.message.includes('Service error')) {
-          errorMessage = error.message;
-        } else if (error.message.includes('Empty response')) {
-          errorMessage = 'No response received from server. The service may be temporarily unavailable. Please try again.';
-        } else if (error.message.includes('base64')) {
-          errorMessage = 'Invalid image data received. Please try again.';
-        } else if (error.message.includes('timeout') || error.message.includes('timed out')) {
-          errorMessage = 'Request timed out. Please try again with a shorter description or try again later.';
-        } else if (error.message.includes('fetch')) {
-          errorMessage = 'Network error. Please check your internet connection and try again.';
-        } else {
-          errorMessage = error.message;
-        }
+        errorMessage = error.message;
       }
       
       setError(errorMessage);
     } finally {
-      clearTimeout(requestTimeout);
       setIsProcessing(false);
       console.log('=== PROCESSING COMPLETED ===');
     }
