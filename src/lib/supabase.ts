@@ -5,6 +5,19 @@ const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
+export interface User {
+  id: string
+  email: string
+  name: string
+  username: string
+  brand_name?: string
+  website_url?: string
+  credits: number
+  is_admin: boolean
+  created_at: string
+  updated_at: string
+}
+
 export interface UserProfile {
   id: string
   email: string
@@ -16,6 +29,19 @@ export interface UserProfile {
   is_admin: boolean
   created_at: string
   updated_at: string
+}
+
+export interface ImageGeneration {
+  id: string
+  user_id: string
+  image_type: string
+  title?: string
+  content?: string
+  style?: string
+  colour?: string
+  credits_used: number
+  image_data: string
+  created_at: string
 }
 
 export const signUp = async (email: string, password: string, userData: {
@@ -232,4 +258,24 @@ export const deductCredits = async (userId: string, amount: number) => {
 
   if (error) throw error
   return data.credits
+}
+
+export const getAllUsers = async (): Promise<User[]> => {
+  const { data, error } = await supabase
+    .from('users')
+    .select('*')
+    .order('created_at', { ascending: false })
+
+  if (error) throw error
+  return data || []
+}
+
+export const getAllImageGenerations = async (): Promise<ImageGeneration[]> => {
+  const { data, error } = await supabase
+    .from('image_generations')
+    .select('*')
+    .order('created_at', { ascending: false })
+
+  if (error) throw error
+  return data || []
 }
