@@ -1,477 +1,235 @@
-import { createClient } from '@supabase/supabase-js';
+import { createClient } from '@supabase/supabase-js'
 
-// Check if environment variables are available
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 
-// Create a flag to check if Supabase is configured
-export const isSupabaseConfigured = !!(supabaseUrl && supabaseAnonKey);
+export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
-// Only create client if configured
-export const supabase = isSupabaseConfigured 
-  ? createClient(supabaseUrl, supabaseAnonKey)
-  : null;
-
-// Database types
-export interface User {
-  id: string;
-  email: string;
-  name: string;
-  brand_name?: string;
-  website_url?: string;
-  username: string;
-  credits: number;
-  is_admin: boolean;
-  created_at: string;
-  updated_at: string;
+export interface UserProfile {
+  id: string
+  email: string
+  name: string
+  username: string
+  brand_name?: string
+  website_url?: string
+  credits: number
+  is_admin: boolean
+  created_at: string
+  updated_at: string
 }
 
-export interface ImageGeneration {
-  id: string;
-  user_id: string;
-  image_type: 'blog' | 'infographic';
-  title?: string;
-  content?: string;
-  style?: string;
-  colour?: string;
-  credits_used: number;
-  image_data: string;
-  created_at: string;
-}
-
-// Helper function to ensure Supabase is configured
-const ensureSupabaseConfigured = () => {
-  if (!isSupabaseConfigured || !supabase) {
-    throw new Error('Supabase is not configured. Please set up your database connection.');
-  }
-  return supabase;
-};
-
-// Auth functions
-export const signUp = async (userData: {
-  email: string;
-  name: string;
-  brand_name?: string;
-  website_url?: string;
-  username: string;
-  password: string;
+export const signUp = async (email: string, password: string, userData: {
+  name: string
+  username: string
+  brand_name?: string
+  website_url?: string
 }) => {
-  const client = ensureSupabaseConfigured();
-  
   try {
-    console.log('Starting sign up process for:', userData.email);
-    
-    // First create the auth user
-    const { data: authData, error: authError } = await client.auth.signUp({
-      email: userData.email,
-      password: userData.password,
-    });
-
-    if (authError) {
-      console.error('Auth sign up error:', authError);
-      if (authError.message.includes('already registered')) {
-        throw new Error('Email already registered. Please use a different email or sign in.');
-      }
-      throw authError;
-    }
-
-    if (!authData.user) {
-      throw new Error('Failed to create user account');
-    }
-
-    console.log('Auth user created successfully:', authData.user.id);
-
-    // Create user profile in our users table
-    const profileData = {
-      id: authData.user.id,
-      email: userData.email,
-      name: userData.name,
-      brand_name: userData.brand_name || null,
-      website_url: userData.website_url || null,
-      username: userData.username,
-    };
-
-    console.log('Creating user profile:', profileData);
-
-    const { data: insertedProfile, error: profileError } = await client
-      .from('users')
-      .insert(profileData)
-      .select()
-      .single();
-
-    if (profileError) {
-      console.error('Profile creation error:', profileError);
-      
-      // Clean up auth user if profile creation fails
-      try {
-        await client.auth.signOut();
-      } catch (cleanupError) {
-        console.error('Cleanup error:', cleanupError);
-      }
-      
-      if (profileError.code === '23505') {
-        // Unique constraint violation
-        if (profileError.message.includes('username')) {
-          throw new Error('Username already taken. Please choose a different username.');
-        } else if (profileError.message.includes('email')) {
-          throw new Error('Email already registered. Please use a different email or sign in.');
-        }
-      }
-      throw new Error(`Failed to create user profile: ${profileError.message}`);
-    }
-
-    console.log('User profile created successfully:', insertedProfile);
-    return { user: insertedProfile, authUser: authData.user };
-  } catch (error) {
-    console.error('Sign up error:', error);
-    throw error;
-  }
-};
-
-export const signIn = async (email: string, password: string) => {
-  const client = ensureSupabaseConfigured();
-  
-  try {
-    console.log('Attempting sign in for:', email);
-    
-    const { data: authData, error: authError } = await client.auth.signInWithPassword({
+    // First, sign up the user
+    const { data: authData, error: authError } = await supabase.auth.signUp({
       email,
       password,
-    });
+    })
 
-    if (authError) {
-      console.error('Auth sign in error:', authError);
-      if (authError.message.includes('Invalid login credentials')) {
-        throw new Error('Invalid email or password. Please check your credentials and try again.');
-      }
-      if (authError.message.includes('Email not confirmed')) {
-        throw new Error('Please check your email and click the confirmation link to activate your account before signing in.');
-      }
-      throw authError;
+    if (authError) throw authError
+    if (!authData.user) throw new Error('No user returned from signup')
+
+    // Create the user profile
+    const { error: profileError } = await supabase
+      .from('users')
+      .insert({
+        id: authData.user.id,
+        email: authData.user.email!,
+        name: userData.name,
+        username: userData.username,
+        brand_name: userData.brand_name || null,
+        website_url: userData.website_url || null,
+        credits: 100,
+        is_admin: false
+      })
+
+    if (profileError) {
+      console.error('Profile creation error:', profileError)
+      throw new Error(`Failed to create user profile: ${profileError.message}`)
     }
 
-    if (!authData.user) {
-      throw new Error('Failed to sign in');
-    }
+    return { user: authData.user, session: authData.session }
+  } catch (error) {
+    console.error('Sign up error:', error)
+    throw error
+  }
+}
 
-    console.log('Auth sign in successful, fetching profile for:', authData.user.id);
+export const signIn = async (email: string, password: string) => {
+  try {
+    // Sign in the user
+    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    })
 
-    // Get user profile
-    const { data: profileData, error: profileError } = await client
+    if (authError) throw authError
+    if (!authData.user) throw new Error('No user returned from signin')
+
+    // Check if user profile exists
+    const { data: profile, error: profileError } = await supabase
       .from('users')
       .select('*')
       .eq('id', authData.user.id)
-      .maybeSingle();
+      .single()
 
-    if (profileError) {
-      console.error('Profile fetch error:', profileError);
-      throw new Error('Failed to fetch user profile');
+    if (profileError && profileError.code !== 'PGRST116') {
+      console.error('Profile fetch error:', profileError)
+      throw new Error(`Failed to fetch user profile: ${profileError.message}`)
     }
 
-    if (!profileData) {
-      console.error('No profile found for user:', authData.user.id);
+    // If no profile exists, create one
+    if (!profile) {
+      console.log('No profile found, creating one for user:', authData.user.id)
       
-      // Check if this is an existing auth user without a profile
-      // This can happen if the user was created before the profile system was set up
-      console.log('Creating missing profile for existing user');
-      
-      // Try to create a profile for this existing user
-      try {
-        const newProfileData = {
+      const { error: createError } = await supabase
+        .from('users')
+        .insert({
           id: authData.user.id,
           email: authData.user.email!,
-          name: authData.user.user_metadata?.name || authData.user.email!.split('@')[0],
-          username: authData.user.email!.split('@')[0].replace(/[^a-z0-9_]/g, '') + '_' + Date.now().toString().slice(-4),
-        };
+          name: authData.user.email!.split('@')[0], // Use email prefix as default name
+          username: authData.user.email!.split('@')[0], // Use email prefix as default username
+          credits: 100,
+          is_admin: false
+        })
 
-        const { data: createdProfile, error: createError } = await client
-          .from('users')
-          .insert(newProfileData)
-          .select()
-          .single();
+      if (createError) {
+        console.error('Profile creation error:', createError)
+        
+        // If it's a duplicate key error, the profile might have been created by another process
+        if (createError.code === '23505') {
+          console.log('Profile already exists, fetching it...')
+          const { data: existingProfile, error: fetchError } = await supabase
+            .from('users')
+            .select('*')
+            .eq('id', authData.user.id)
+            .single()
 
-        if (createError) {
-          console.error('Failed to create missing profile:', createError);
-          await client.auth.signOut();
-          throw new Error('User profile not found and could not be created. Please contact support.');
+          if (fetchError) {
+            throw new Error(`Failed to fetch existing profile: ${fetchError.message}`)
+          }
+
+          return { user: authData.user, session: authData.session, profile: existingProfile }
         }
-
-        console.log('Created missing profile:', createdProfile);
-        return { user: createdProfile, authUser: authData.user };
-      } catch (createProfileError) {
-        console.error('Error creating missing profile:', createProfileError);
-        await client.auth.signOut();
-        throw new Error('User profile not found. Please contact support or try creating a new account.');
+        
+        throw new Error(`Failed to create user profile: ${createError.message}`)
       }
+
+      // Fetch the newly created profile
+      const { data: newProfile, error: newProfileError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', authData.user.id)
+        .single()
+
+      if (newProfileError) {
+        throw new Error(`Failed to fetch new profile: ${newProfileError.message}`)
+      }
+
+      return { user: authData.user, session: authData.session, profile: newProfile }
     }
 
-    console.log('Sign in successful with profile:', profileData.email);
-    return { user: profileData, authUser: authData.user };
+    return { user: authData.user, session: authData.session, profile }
   } catch (error) {
-    console.error('Sign in error:', error);
-    throw error;
+    console.error('Sign in error:', error)
+    throw error
   }
-};
+}
 
 export const signOut = async () => {
-  const client = ensureSupabaseConfigured();
-  
+  const { error } = await supabase.auth.signOut()
+  if (error) throw error
+}
+
+export const getCurrentUser = async (): Promise<{ user: any; profile: UserProfile | null }> => {
   try {
-    const { error } = await client.auth.signOut();
-    if (error) throw error;
-  } catch (error) {
-    console.error('Sign out error:', error);
-    throw error;
-  }
-};
-
-export const getCurrentUser = async () => {
-  if (!isSupabaseConfigured || !supabase) {
-    console.info('Supabase not configured, no user session available');
-    return null;
-  }
-
-  try {
-    const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
+    const { data: { user }, error: userError } = await supabase.auth.getUser()
     
-    if (authError) {
-      // Handle expected "Auth session missing!" error gracefully
-      if (authError.message === 'Auth session missing!') {
-        console.info('No active Supabase session found');
-        return null;
-      }
-      console.error('Auth error:', authError);
-      return null;
-    }
-    
-    if (!authUser) {
-      console.info('No authenticated user found');
-      return null;
-    }
+    if (userError) throw userError
+    if (!user) return { user: null, profile: null }
 
-    console.log('Found authenticated user, fetching profile:', authUser.id);
-
-    // Get user profile
-    const { data: profileData, error: profileError } = await supabase
+    const { data: profile, error: profileError } = await supabase
       .from('users')
       .select('*')
-      .eq('id', authUser.id)
-      .maybeSingle();
+      .eq('id', user.id)
+      .single()
 
-    if (profileError) {
-      console.error('Profile fetch error:', profileError);
-      return null;
-    }
-
-    if (!profileData) {
-      console.warn('No profile found for authenticated user:', authUser.id);
+    if (profileError && profileError.code !== 'PGRST116') {
+      console.error('Profile fetch error:', profileError)
       
-      // Try to create a profile for this existing user
-      try {
-        console.log('Attempting to create missing profile for existing auth user');
-        
-        const newProfileData = {
-          id: authUser.id,
-          email: authUser.email!,
-          name: authUser.user_metadata?.name || authUser.email!.split('@')[0],
-          username: authUser.email!.split('@')[0].replace(/[^a-z0-9_]/g, '') + '_' + Date.now().toString().slice(-4),
-        };
+      // Try to create a missing profile
+      const { error: createError } = await supabase
+        .from('users')
+        .insert({
+          id: user.id,
+          email: user.email!,
+          name: user.email!.split('@')[0],
+          username: user.email!.split('@')[0],
+          credits: 100,
+          is_admin: false
+        })
 
-        const { data: createdProfile, error: createError } = await supabase
-          .from('users')
-          .insert(newProfileData)
-          .select()
-          .single();
-
-        if (createError) {
-          console.error('Failed to create missing profile:', createError);
-          await supabase.auth.signOut();
-          return null;
-        }
-
-        console.log('Successfully created missing profile:', createdProfile);
-        return { user: createdProfile, authUser };
-      } catch (createProfileError) {
-        console.error('Error creating missing profile:', createProfileError);
-        await supabase.auth.signOut();
-        return null;
+      if (createError && createError.code !== '23505') {
+        throw new Error(`Failed to create missing profile: ${createError.message}`)
       }
+
+      // Fetch the profile again
+      const { data: newProfile, error: newProfileError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', user.id)
+        .single()
+
+      if (newProfileError) {
+        throw new Error(`Failed to fetch profile after creation: ${newProfileError.message}`)
+      }
+
+      return { user, profile: newProfile }
     }
 
-    console.log('Successfully retrieved user profile:', profileData.email);
-    return { user: profileData, authUser };
+    return { user, profile }
   } catch (error) {
-    console.error('Get current user error:', error);
-    return null;
+    console.error('Get current user error:', error)
+    throw error
   }
-};
+}
 
-// Credit functions
+export const updateUserProfile = async (userId: string, updates: Partial<UserProfile>) => {
+  const { data, error } = await supabase
+    .from('users')
+    .update(updates)
+    .eq('id', userId)
+    .select()
+    .single()
+
+  if (error) throw error
+  return data
+}
+
+export const getUserCredits = async (userId: string): Promise<number> => {
+  const { data, error } = await supabase
+    .from('users')
+    .select('credits')
+    .eq('id', userId)
+    .single()
+
+  if (error) throw error
+  return data.credits || 0
+}
+
 export const deductCredits = async (userId: string, amount: number) => {
-  const client = ensureSupabaseConfigured();
-  
-  try {
-    // First get current credits to calculate new value
-    const { data: currentUser, error: fetchError } = await client
-      .from('users')
-      .select('credits')
-      .eq('id', userId)
-      .single();
+  const { data, error } = await supabase
+    .from('users')
+    .update({ credits: supabase.raw(`credits - ${amount}`) })
+    .eq('id', userId)
+    .select('credits')
+    .single()
 
-    if (fetchError) throw fetchError;
-
-    const newCredits = currentUser.credits - amount;
-    
-    // Update with the calculated value
-    const { data, error } = await client
-      .from('users')
-      .update({ credits: newCredits })
-      .eq('id', userId)
-      .select('credits')
-      .single();
-
-    if (error) throw error;
-    return data.credits;
-  } catch (error) {
-    console.error('Deduct credits error:', error);
-    throw error;
-  }
-};
-
-export const addCredits = async (userId: string, amount: number) => {
-  const client = ensureSupabaseConfigured();
-  
-  try {
-    // First get current credits to calculate new value
-    const { data: currentUser, error: fetchError } = await client
-      .from('users')
-      .select('credits')
-      .eq('id', userId)
-      .single();
-
-    if (fetchError) throw fetchError;
-
-    const newCredits = currentUser.credits + amount;
-    
-    // Update with the calculated value
-    const { data, error } = await client
-      .from('users')
-      .update({ credits: newCredits })
-      .eq('id', userId)
-      .select('credits')
-      .single();
-
-    if (error) throw error;
-    return data.credits;
-  } catch (error) {
-    console.error('Add credits error:', error);
-    throw error;
-  }
-};
-
-// Image generation functions
-export const saveImageGeneration = async (imageData: {
-  user_id: string;
-  image_type: 'blog' | 'infographic';
-  title?: string;
-  content?: string;
-  style?: string;
-  colour?: string;
-  credits_used: number;
-  image_data: string;
-}) => {
-  const client = ensureSupabaseConfigured();
-  
-  try {
-    const { data, error } = await client
-      .from('image_generations')
-      .insert(imageData)
-      .select()
-      .single();
-
-    if (error) throw error;
-    return data;
-  } catch (error) {
-    console.error('Save image generation error:', error);
-    throw error;
-  }
-};
-
-export const getUserImageGenerations = async (userId: string) => {
-  const client = ensureSupabaseConfigured();
-  
-  try {
-    const { data, error } = await client
-      .from('image_generations')
-      .select('*')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false });
-
-    if (error) throw error;
-    return data;
-  } catch (error) {
-    console.error('Get user image generations error:', error);
-    throw error;
-  }
-};
-
-// Admin functions (using service role)
-export const getAllUsers = async () => {
-  const client = ensureSupabaseConfigured();
-  
-  try {
-    const { data, error } = await client
-      .from('users')
-      .select('*')
-      .order('created_at', { ascending: false });
-
-    if (error) throw error;
-    return data;
-  } catch (error) {
-    console.error('Get all users error:', error);
-    throw error;
-  }
-};
-
-export const updateUserCredits = async (userId: string, credits: number) => {
-  const client = ensureSupabaseConfigured();
-  
-  try {
-    const { data, error } = await client
-      .from('users')
-      .update({ credits })
-      .eq('id', userId)
-      .select()
-      .single();
-
-    if (error) throw error;
-    return data;
-  } catch (error) {
-    console.error('Update user credits error:', error);
-    throw error;
-  }
-};
-
-export const getAllImageGenerations = async () => {
-  const client = ensureSupabaseConfigured();
-  
-  try {
-    const { data, error } = await client
-      .from('image_generations')
-      .select(`
-        *,
-        users (
-          name,
-          email,
-          username
-        )
-      `)
-      .order('created_at', { ascending: false });
-
-    if (error) throw error;
-    return data;
-  } catch (error) {
-    console.error('Get all image generations error:', error);
-    throw error;
-  }
-};
+  if (error) throw error
+  return data.credits
+}
