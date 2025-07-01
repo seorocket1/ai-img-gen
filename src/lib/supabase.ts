@@ -5,7 +5,7 @@ const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 
 export const isSupabaseConfigured = !!(supabaseUrl && supabaseAnonKey)
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+export const supabase = isSupabaseConfigured ? createClient(supabaseUrl, supabaseAnonKey) : null
 
 export interface User {
   id: string
@@ -52,6 +52,10 @@ export const signUp = async (email: string, password: string, userData: {
   brand_name?: string
   website_url?: string
 }) => {
+  if (!supabase) {
+    throw new Error('Supabase client not initialized')
+  }
+
   try {
     // First, sign up the user
     const { data: authData, error: authError } = await supabase.auth.signUp({
@@ -89,6 +93,10 @@ export const signUp = async (email: string, password: string, userData: {
 }
 
 export const signIn = async (email: string, password: string) => {
+  if (!supabase) {
+    throw new Error('Supabase client not initialized')
+  }
+
   try {
     // Sign in the user
     const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
@@ -170,16 +178,31 @@ export const signIn = async (email: string, password: string) => {
 }
 
 export const signOut = async () => {
+  if (!supabase) {
+    throw new Error('Supabase client not initialized')
+  }
+
   const { error } = await supabase.auth.signOut()
   if (error) throw error
 }
 
-export const getCurrentUser = async (): Promise<{ user: any; profile: UserProfile | null }> => {
+export const getCurrentUser = async (): Promise<{ user: any; profile: UserProfile | null } | null> => {
+  if (!supabase) {
+    throw new Error('Supabase client not initialized')
+  }
+
   try {
     const { data: { user }, error: userError } = await supabase.auth.getUser()
     
-    if (userError) throw userError
-    if (!user) return { user: null, profile: null }
+    if (userError) {
+      console.log('No authenticated user found:', userError.message)
+      return null
+    }
+    
+    if (!user) {
+      console.log('No user session found')
+      return null
+    }
 
     const { data: profile, error: profileError } = await supabase
       .from('users')
@@ -223,11 +246,15 @@ export const getCurrentUser = async (): Promise<{ user: any; profile: UserProfil
     return { user, profile }
   } catch (error) {
     console.error('Get current user error:', error)
-    throw error
+    return null
   }
 }
 
 export const updateUserProfile = async (userId: string, updates: Partial<UserProfile>) => {
+  if (!supabase) {
+    throw new Error('Supabase client not initialized')
+  }
+
   const { data, error } = await supabase
     .from('users')
     .update(updates)
@@ -240,6 +267,10 @@ export const updateUserProfile = async (userId: string, updates: Partial<UserPro
 }
 
 export const updateUserCredits = async (userId: string, credits: number) => {
+  if (!supabase) {
+    throw new Error('Supabase client not initialized')
+  }
+
   const { data, error } = await supabase
     .from('users')
     .update({ credits })
@@ -252,6 +283,10 @@ export const updateUserCredits = async (userId: string, credits: number) => {
 }
 
 export const getUserCredits = async (userId: string): Promise<number> => {
+  if (!supabase) {
+    throw new Error('Supabase client not initialized')
+  }
+
   const { data, error } = await supabase
     .from('users')
     .select('credits')
@@ -263,6 +298,10 @@ export const getUserCredits = async (userId: string): Promise<number> => {
 }
 
 export const deductCredits = async (userId: string, amount: number) => {
+  if (!supabase) {
+    throw new Error('Supabase client not initialized')
+  }
+
   const { data, error } = await supabase
     .from('users')
     .update({ credits: supabase.raw(`credits - ${amount}`) })
@@ -275,6 +314,10 @@ export const deductCredits = async (userId: string, amount: number) => {
 }
 
 export const getAllUsers = async (): Promise<User[]> => {
+  if (!supabase) {
+    throw new Error('Supabase client not initialized')
+  }
+
   const { data, error } = await supabase
     .from('users')
     .select('*')
@@ -285,6 +328,10 @@ export const getAllUsers = async (): Promise<User[]> => {
 }
 
 export const getAllImageGenerations = async (): Promise<ImageGeneration[]> => {
+  if (!supabase) {
+    throw new Error('Supabase client not initialized')
+  }
+
   const { data, error } = await supabase
     .from('image_generations')
     .select('*')
@@ -295,6 +342,10 @@ export const getAllImageGenerations = async (): Promise<ImageGeneration[]> => {
 }
 
 export const getUserImageGenerations = async (userId: string): Promise<ImageGeneration[]> => {
+  if (!supabase) {
+    throw new Error('Supabase client not initialized')
+  }
+
   const { data, error } = await supabase
     .from('image_generations')
     .select('*')
