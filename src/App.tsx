@@ -836,7 +836,7 @@ function App() {
             </p>
           </div>
         </div>
-      </div>
+      </footer>
 
       {/* Modals and Notifications */}
       <ImageHistorySidebar
