@@ -272,6 +272,7 @@ export const createHistoryImage = (
 
 /**
  * Main function to process image generation response from n8n webhook
+ * This function is used by ALL image generation types (blog, infographic, bulk)
  */
 export const processImageResponse = async (
   responseData: any,
