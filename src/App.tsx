@@ -18,6 +18,11 @@ import { useImageHistory } from './hooks/useImageHistory';
 import { useProcessingState } from './hooks/useProcessingState';
 import { sanitizeFormData } from './utils/textSanitizer';
 import { isSupabaseConfigured } from './lib/supabase';
+import { 
+  processImageResponse, 
+  checkUserCredits, 
+  getCreditCost 
+} from './services/imageResponseHandler';
 
 type Step = 'select' | 'form' | 'result';
 type ImageType = 'blog' | 'infographic' | null;
@@ -28,12 +33,6 @@ interface GeneratedImage {
 }
 
 const WEBHOOK_URL = 'https://n8n.seoengine.agency/webhook/6e9e3b30-cb55-4d74-aa9d-68691983455f';
-
-// Credit costs
-const CREDIT_COSTS = {
-  blog: 5,
-  infographic: 10,
-};
 
 function App() {
   const { user, isAuthenticated, isLoading: authLoading, error: authError, signUp, signIn, signOut, refreshUser, clearError } = useSupabaseAuth();
@@ -103,104 +102,12 @@ function App() {
   };
 
   const checkCredits = (imageType: 'blog' | 'infographic'): boolean => {
-    if (!user || !isAuthenticated || !isSupabaseConfigured) return true; // Allow usage for non-authenticated users or when DB not configured
-    
-    const requiredCredits = CREDIT_COSTS[imageType];
-    if (user.credits < requiredCredits) {
-      setError(`Insufficient credits. You need ${requiredCredits} credits to generate a ${imageType} image. You currently have ${user.credits} credits.`);
+    if (!checkUserCredits(user, imageType)) {
+      const requiredCredits = getCreditCost(imageType);
+      setError(`Insufficient credits. You need ${requiredCredits} credits to generate a ${imageType} image. You currently have ${user?.credits || 0} credits.`);
       return false;
     }
     return true;
-  };
-
-  // Simplified and more robust image extraction function
-  const extractImageData = (responseData: any, responseText: string): string | null => {
-    console.log('=== EXTRACTING IMAGE DATA ===');
-    console.log('Response data type:', typeof responseData);
-    console.log('Response text length:', responseText.length);
-    console.log('Response data keys:', responseData && typeof responseData === 'object' ? Object.keys(responseData) : 'Not an object');
-
-    let imageBase64 = null;
-
-    // Method 1: Direct property access (most common case)
-    if (responseData && typeof responseData === 'object') {
-      // Check for 'image' property first (most likely from n8n)
-      if (responseData.image && typeof responseData.image === 'string') {
-        console.log('Found image in responseData.image');
-        imageBase64 = responseData.image;
-      }
-      // Check other common property names
-      else if (responseData.data && typeof responseData.data === 'string') {
-        console.log('Found image in responseData.data');
-        imageBase64 = responseData.data;
-      }
-      else if (responseData.base64 && typeof responseData.base64 === 'string') {
-        console.log('Found image in responseData.base64');
-        imageBase64 = responseData.base64;
-      }
-      // Check for nested structures
-      else if (responseData.data && responseData.data.image) {
-        console.log('Found image in responseData.data.image');
-        imageBase64 = responseData.data.image;
-      }
-    }
-
-    // Method 2: If response is a string, treat it as base64
-    if (!imageBase64 && typeof responseData === 'string' && responseData.length > 100) {
-      console.log('Treating entire response as base64 string');
-      imageBase64 = responseData;
-    }
-
-    // Method 3: Parse response text for base64 patterns
-    if (!imageBase64 && responseText && responseText.length > 100) {
-      console.log('Searching response text for base64 patterns');
-      
-      // Look for data URL pattern
-      const dataUrlMatch = responseText.match(/data:image\/[^;]+;base64,([A-Za-z0-9+/=]+)/);
-      if (dataUrlMatch && dataUrlMatch[1]) {
-        console.log('Found base64 in data URL');
-        imageBase64 = dataUrlMatch[1];
-      }
-      // Look for JSON with image property
-      else {
-        const imageMatch = responseText.match(/"image"\s*:\s*"([A-Za-z0-9+/=]+)"/);
-        if (imageMatch && imageMatch[1]) {
-          console.log('Found base64 in JSON image property');
-          imageBase64 = imageMatch[1];
-        }
-        // Look for standalone base64 (at least 1000 chars)
-        else {
-          const base64Match = responseText.match(/([A-Za-z0-9+/]{1000,}={0,2})/);
-          if (base64Match && base64Match[1]) {
-            console.log('Found standalone base64 pattern');
-            imageBase64 = base64Match[1];
-          }
-        }
-      }
-    }
-
-    // Clean the base64 string
-    if (imageBase64) {
-      // Remove data URL prefix if present
-      if (imageBase64.startsWith('data:image/')) {
-        imageBase64 = imageBase64.split(',')[1];
-      }
-      
-      // Remove any whitespace
-      imageBase64 = imageBase64.replace(/\s/g, '');
-      
-      console.log('Cleaned base64 length:', imageBase64.length);
-      console.log('First 50 chars:', imageBase64.substring(0, 50));
-      console.log('Last 10 chars:', imageBase64.substring(imageBase64.length - 10));
-    }
-
-    console.log('Image extraction result:', {
-      found: !!imageBase64,
-      length: imageBase64 ? imageBase64.length : 0,
-      isValidLength: imageBase64 ? imageBase64.length > 1000 : false
-    });
-
-    return imageBase64;
   };
 
   const handleFormSubmit = async (data: any) => {
@@ -225,9 +132,9 @@ function App() {
     setError(null);
     
     try {
-      console.log('=== STARTING IMAGE GENERATION ===');
+      console.log('🚀 Starting image generation...');
       console.log('Selected type:', selectedType);
-      console.log('Raw form data:', data);
+      console.log('Form data:', data);
       
       // Sanitize the data before sending
       const sanitizedData = sanitizeFormData(data);
@@ -236,7 +143,7 @@ function App() {
       // Prepare image detail with style and colour if provided
       let imageDetail = '';
       if (selectedType === 'blog') {
-        imageDetail = `Blog post title: '${sanitizedData.title}', Content: ${sanitizedData.intro}`;
+        imageDetail = `Blog post title: '${sanitizedData.title}', Content: ${sanitizedData.intro || sanitizedData.content}`;
       } else {
         imageDetail = sanitizedData.content;
       }
@@ -255,9 +162,7 @@ function App() {
         image_detail: imageDetail,
       };
 
-      console.log('=== SENDING TO WEBHOOK ===');
-      console.log('Webhook URL:', WEBHOOK_URL);
-      console.log('Payload:', JSON.stringify(payload, null, 2));
+      console.log('📤 Sending to webhook:', payload);
 
       const response = await fetch(WEBHOOK_URL, {
         method: 'POST',
@@ -272,11 +177,7 @@ function App() {
 
       clearTimeout(requestTimeout);
 
-      console.log('=== WEBHOOK RESPONSE ===');
-      console.log('Response status:', response.status);
-      console.log('Response ok:', response.ok);
-      console.log('Response status text:', response.statusText);
-      console.log('Response headers:', Object.fromEntries(response.headers.entries()));
+      console.log('📥 Webhook response received:', response.status);
 
       if (!response.ok) {
         let errorText = '';
@@ -298,12 +199,9 @@ function App() {
         }
       }
 
-      // Get response as text first to debug
+      // Get response as text first
       const responseText = await response.text();
-      console.log('=== RAW RESPONSE ===');
-      console.log('Response text length:', responseText.length);
-      console.log('First 200 chars:', responseText.substring(0, 200));
-      console.log('Last 100 chars:', responseText.substring(Math.max(0, responseText.length - 100)));
+      console.log('📄 Raw response received, length:', responseText.length);
 
       if (!responseText || responseText.trim() === '') {
         throw new Error('Empty response received from image generation service. Please try again.');
@@ -312,119 +210,49 @@ function App() {
       let result;
       try {
         result = JSON.parse(responseText);
-        console.log('=== PARSED JSON ===');
-        console.log('Result type:', typeof result);
-        console.log('Result keys:', result && typeof result === 'object' ? Object.keys(result) : 'Not an object');
+        console.log('✅ Response parsed as JSON');
       } catch (parseError) {
-        console.error('JSON parse error:', parseError);
-        console.log('Response was not valid JSON. Treating as raw data...');
-        
-        // If it's not JSON, treat the entire response as potential image data
+        console.log('⚠️ Response was not valid JSON, treating as raw data');
         result = responseText.trim();
       }
 
-      // Use enhanced image extraction function
-      const imageBase64 = extractImageData(result, responseText);
-
-      console.log('=== IMAGE DATA VALIDATION ===');
-      console.log('Image base64 found:', !!imageBase64);
-      console.log('Image base64 length:', imageBase64 ? imageBase64.length : 0);
-
-      if (!imageBase64) {
-        console.error('=== NO IMAGE DATA FOUND ===');
-        console.error('Full response structure:', JSON.stringify(result, null, 2));
-        console.error('Response text sample:', responseText.substring(0, 1000));
-        throw new Error('No image data found in response. The image generation service may have failed. Please try again.');
-      }
-
-      // Validate base64 string length
-      if (imageBase64.length < 1000) {
-        throw new Error('Received image data is too short to be valid. Please try again.');
-      }
-
-      // Test if it's valid base64
-      try {
-        atob(imageBase64.substring(0, 100)); // Test decode a small portion
-        console.log('Base64 validation passed');
-      } catch (base64Error) {
-        console.error('Base64 validation failed:', base64Error);
-        throw new Error('Received data is not valid base64 format. Please try again.');
-      }
-
-      console.log('=== PROCESSING CREDITS AND DATABASE ===');
-
-      // Deduct credits for authenticated users (only if Supabase is configured)
-      if (user && isAuthenticated && isSupabaseConfigured) {
-        try {
-          console.log('Deducting credits for user:', user.id, 'Amount:', CREDIT_COSTS[selectedType]);
-          const { deductCredits } = await import('./lib/supabase');
-          const newCredits = await deductCredits(user.id, CREDIT_COSTS[selectedType]);
-          console.log('Credits deducted successfully. New balance:', newCredits);
-          await refreshUser(); // Refresh user data to update credits
-        } catch (creditError) {
-          console.error('Error deducting credits:', creditError);
-          // Continue with image generation even if credit deduction fails
+      // Use the image response handler
+      const processResult = await processImageResponse(
+        result,
+        responseText,
+        selectedType,
+        sanitizedData,
+        {
+          user,
+          onImageGenerated: addToHistory,
+          onRefreshUser: refreshUser,
+          isBulkProcessing: false
         }
+      );
+
+      if (!processResult.success) {
+        throw new Error(processResult.error || 'Failed to process image response');
       }
 
-      // Save to database for authenticated users (only if Supabase is configured)
-      if (user && isAuthenticated && isSupabaseConfigured) {
-        try {
-          console.log('Saving image generation to database');
-          const { saveImageGeneration } = await import('./lib/supabase');
-          await saveImageGeneration({
-            user_id: user.id,
-            image_type: selectedType,
-            title: selectedType === 'blog' ? sanitizedData.title : undefined,
-            content: selectedType === 'blog' ? sanitizedData.intro : sanitizedData.content,
-            style: sanitizedData.style,
-            colour: sanitizedData.colour,
-            credits_used: CREDIT_COSTS[selectedType],
-            image_data: imageBase64,
-          });
-          console.log('Image generation saved to database successfully');
-        } catch (dbError) {
-          console.error('Error saving to database:', dbError);
-          // Continue with local storage even if database save fails
-        }
+      if (!processResult.image) {
+        throw new Error('No image data received');
       }
 
-      console.log('=== FINALIZING IMAGE GENERATION ===');
+      console.log('✅ Image generation completed successfully');
 
       const newImage = {
-        base64: imageBase64,
+        base64: processResult.image.base64,
         type: selectedType as 'blog' | 'infographic',
       };
       
-      console.log('Setting generated image');
       setGeneratedImage(newImage);
       setCurrentStep('result');
-      
-      // Create history image object with proper structure
-      const historyImage = {
-        id: `img-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-        type: selectedType as 'blog' | 'infographic',
-        base64: imageBase64,
-        title: selectedType === 'blog' ? sanitizedData.title : 'Infographic',
-        content: selectedType === 'blog' ? sanitizedData.intro : sanitizedData.content,
-        timestamp: Date.now(),
-        style: sanitizedData.style || undefined,
-        colour: sanitizedData.colour || undefined,
-      };
-      
-      console.log('Adding image to history:', historyImage.id);
-      
-      // Add to history immediately - this will trigger real-time updates
-      addToHistory(historyImage);
       
       // Show success notification
       setShowSuccessNotification(true);
       
-      console.log('=== IMAGE GENERATION COMPLETED SUCCESSFULLY ===');
     } catch (error) {
-      console.error('=== IMAGE GENERATION ERROR ===');
-      console.error('Error details:', error);
-      console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace');
+      console.error('❌ Image generation error:', error);
       
       let errorMessage = 'Failed to generate image. Please try again.';
       
@@ -452,7 +280,6 @@ function App() {
     } finally {
       clearTimeout(requestTimeout);
       setIsProcessing(false);
-      console.log('=== PROCESSING COMPLETED ===');
     }
   };
 
@@ -930,8 +757,8 @@ function App() {
                   </div>
                   <p className="text-gray-600 mt-2 text-sm sm:text-base">
                     {selectedType === 'blog' 
-                      ? `Provide your blog details to generate a stunning featured image${isSupabaseConfigured ? ` (${CREDIT_COSTS.blog} credits)` : ''}`
-                      : `Provide your content to create a visual infographic${isSupabaseConfigured ? ` (${CREDIT_COSTS.infographic} credits)` : ''}`
+                      ? `Provide your blog details to generate a stunning featured image${isSupabaseConfigured ? ` (${getCreditCost('blog')} credits)` : ''}`
+                      : `Provide your content to create a visual infographic${isSupabaseConfigured ? ` (${getCreditCost('infographic')} credits)` : ''}`
                     }
                   </p>
                 </div>
@@ -1009,7 +836,7 @@ function App() {
             </p>
           </div>
         </div>
-      </footer>
+      </div>
 
       {/* Modals and Notifications */}
       <ImageHistorySidebar
