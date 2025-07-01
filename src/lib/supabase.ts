@@ -293,3 +293,14 @@ export const getAllImageGenerations = async (): Promise<ImageGeneration[]> => {
   if (error) throw error
   return data || []
 }
+
+export const getUserImageGenerations = async (userId: string): Promise<ImageGeneration[]> => {
+  const { data, error } = await supabase
+    .from('image_generations')
+    .select('*')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+
+  if (error) throw error
+  return data || []
+}
