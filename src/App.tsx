@@ -216,7 +216,7 @@ function App() {
         result = responseText.trim();
       }
 
-      // Use the enhanced image response handler - THIS IS THE CRITICAL PART
+      // Use the enhanced image response handler
       console.log('🔄 Processing n8n webhook response with image handler...');
       const processResult = await processImageResponse(
         result,
